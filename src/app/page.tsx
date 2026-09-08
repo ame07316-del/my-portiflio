@@ -15,6 +15,8 @@ import {
 } from "@/components/site/Sections";
 import { getDict, LANG_COOKIE } from "@/lib/i18n";
 import GlobeSection from "@/components/site/GlobeSection";
+import WorldShift from "@/components/site/WorldShift";
+import QuickTour from "@/components/site/QuickTour";
 import {
   getExperiences,
   getLocations,
@@ -82,8 +84,27 @@ export default async function Home() {
         hint={dict.loader.hint}
         brandMark={settings.brand_mark}
       />
+      <WorldShift dayLabel={dict.tour.day} nightLabel={dict.tour.night} />
       <ScrollProgress />
       <Cursor />
+      <QuickTour
+        label={dict.tour.button}
+        hint={dict.tour.hint}
+        exitLabel={dict.tour.exit}
+        sections={[
+          { id: "top", label: dict.nav.home },
+          { id: "about", label: dict.nav.about },
+          { id: "services", label: dict.nav.services },
+          { id: "work", label: dict.nav.work },
+          ...(settings.show_globe && locations.length
+            ? [{ id: "global", label: dict.nav.global }]
+            : []),
+          { id: "skills", label: dict.nav.skills },
+          { id: "timeline", label: dict.timeline.label },
+          { id: "process", label: dict.process.label },
+          { id: "contact", label: dict.nav.contact },
+        ]}
+      />
       <Nav
         dict={dict}
         lang={lang}

@@ -8,9 +8,11 @@ import type { NextRequest } from "next/server";
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const isLogin = pathname === "/admin/login";
+  // the magic-link route authenticates itself with the ?t= token
+  const isTokenLink = pathname === "/admin/api/token";
   const hasSession = Boolean(request.cookies.get("pf_session")?.value);
 
-  if (!hasSession && !isLogin) {
+  if (!hasSession && !isLogin && !isTokenLink) {
     const url = request.nextUrl.clone();
     url.pathname = "/admin/login";
     url.search = `?next=${encodeURIComponent(pathname + search)}`;

@@ -51,6 +51,7 @@ export type Settings = {
   globe_desc_en: string;
   globe_desc_ar: string;
   globe_color: string;
+  admin_token: string;
 };
 
 export type GlobeLocation = {

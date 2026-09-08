@@ -1,18 +1,25 @@
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/admin/PageHeader";
 import AccountForms from "@/components/admin/AccountForms";
-import { getSession } from "@/lib/auth";
+import { getAdminToken, getSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function AccountPage() {
   const session = await getSession();
   if (!session) redirect("/admin/login");
+  const token = await getAdminToken();
 
   return (
     <>
-      <PageHeader title="Account" desc="Your admin credentials." />
-      <AccountForms user={{ name: session.name, email: session.email }} />
+      <PageHeader
+        title="Access"
+        desc="The token that unlocks this dashboard."
+      />
+      <AccountForms
+        user={{ name: session.name, email: session.email }}
+        token={token}
+      />
     </>
   );
 }

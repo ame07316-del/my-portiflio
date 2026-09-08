@@ -4,12 +4,13 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { exportData, importData, migrate, query } from "@/lib/db";
 import {
-  changePassword,
   createSession,
   destroySession,
+  getAdminToken,
   requireSession,
+  setAdminToken,
   updateAccount,
-  verifyCredentials,
+  verifyToken,
 } from "@/lib/auth";
 
 export type FormState = { ok?: boolean; error?: string; message?: string };
@@ -24,16 +25,34 @@ export async function loginAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const email = String(formData.get("email") ?? "");
-  const password = String(formData.get("password") ?? "");
+  const token = String(formData.get("token") ?? "");
   const next = String(formData.get("next") ?? "/admin");
 
-  if (!email || !password) return { error: "EMPTY" };
-  const user = await verifyCredentials(email, password);
-  if (!user) return { error: "INVALID" };
+  if (!token.trim()) return { error: "EMPTY" };
+  const session = await verifyToken(token);
+  if (!session) return { error: "INVALID" };
 
-  await createSession(user);
+  await createSession(session);
   redirect(next.startsWith("/admin") ? next : "/admin");
+}
+
+/** Rotate the access token (and keep the current session signed in). */
+export async function saveToken(
+  _prev: FormState,
+  f: FormData,
+): Promise<FormState> {
+  await requireSession();
+  const token = String(f.get("token") ?? "").trim();
+  if (token.length < 6) return { error: "SHORT" };
+  await setAdminToken(token);
+  refresh();
+  revalidatePath("/admin/access");
+  return { ok: true, message: token };
+}
+
+export async function currentToken() {
+  await requireSession();
+  return getAdminToken();
 }
 
 export async function logoutAction() {
@@ -413,17 +432,4 @@ export async function saveAccount(
   return { ok: true, message: "SAVED" };
 }
 
-export async function savePassword(
-  _prev: FormState,
-  f: FormData,
-): Promise<FormState> {
-  const session = await requireSession();
-  const current = String(f.get("current") ?? "");
-  const next = String(f.get("next") ?? "");
-  const confirm = String(f.get("confirm") ?? "");
-  if (next.length < 8) return { error: "TOO_SHORT" };
-  if (next !== confirm) return { error: "MISMATCH" };
-  const res = await changePassword(session.uid, current, next);
-  if (res !== "OK") return { error: res };
-  return { ok: true, message: "PASSWORD_CHANGED" };
-}
+

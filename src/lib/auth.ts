@@ -55,6 +55,51 @@ export async function requireSession(): Promise<Session> {
   return session;
 }
 
+/* ----------------------------- token access ----------------------------- */
+
+export const DEFAULT_ADMIN_TOKEN = "amr-portfolio-2025";
+
+/** The single key that opens the dashboard. Env wins over the database. */
+export async function getAdminToken(): Promise<string> {
+  const fromEnv = process.env.ADMIN_TOKEN?.trim();
+  if (fromEnv) return fromEnv;
+  try {
+    const row = await queryOne<{ admin_token: string }>(
+      "SELECT admin_token FROM settings WHERE id = 1",
+    );
+    return row?.admin_token?.trim() || DEFAULT_ADMIN_TOKEN;
+  } catch {
+    return DEFAULT_ADMIN_TOKEN;
+  }
+}
+
+/** Constant-time-ish comparison so the token can't be guessed by timing. */
+function sameToken(a: string, b: string) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+export async function verifyToken(token: string): Promise<Session | null> {
+  const expected = await getAdminToken();
+  if (!token || !sameToken(token.trim(), expected)) return null;
+
+  const owner = await queryOne<{ name_en: string; email: string }>(
+    "SELECT name_en, email FROM settings WHERE id = 1",
+  ).catch(() => null);
+
+  return {
+    uid: 1,
+    email: owner?.email || "owner@portfolio",
+    name: owner?.name_en || "Owner",
+  } satisfies Session;
+}
+
+export async function setAdminToken(token: string) {
+  await query("UPDATE settings SET admin_token = $1 WHERE id = 1", [token.trim()]);
+}
+
 export async function verifyCredentials(email: string, password: string) {
   const user = await queryOne<User>("SELECT * FROM users WHERE email = $1", [
     email.trim().toLowerCase(),

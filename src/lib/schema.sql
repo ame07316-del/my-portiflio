@@ -131,3 +131,6 @@ ALTER TABLE settings ADD COLUMN IF NOT EXISTS globe_title_ar TEXT NOT NULL DEFAU
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS globe_desc_en  TEXT NOT NULL DEFAULT 'Remote-first, timezone friendly. Based in Cairo, shipping products for teams across the globe.';
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS globe_desc_ar  TEXT NOT NULL DEFAULT 'بشتغل أونلاين مع أي توقيت. مقري القاهرة، وبسلّم مشاريع لعملاء في كل مكان.';
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS globe_color    TEXT NOT NULL DEFAULT '#e9c98b';
+
+-- Token based admin access (replaces email + password)
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS admin_token TEXT NOT NULL DEFAULT 'amr-portfolio-2025';

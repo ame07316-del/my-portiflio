@@ -42,4 +42,5 @@ export const DEFAULT_SETTINGS: Settings = {
   globe_desc_en: "",
   globe_desc_ar: "",
   globe_color: "#e9c98b",
+  admin_token: "amr-portfolio-2025",
 };

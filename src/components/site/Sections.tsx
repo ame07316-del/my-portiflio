@@ -442,7 +442,7 @@ export function Timeline({
 }) {
   if (!items.length) return null;
   return (
-    <section className="relative py-24 sm:py-28">
+    <section id="timeline" className="relative py-24 sm:py-28">
       <div className="container-x">
         <SectionHeading label={dict.timeline.label} title={dict.timeline.title} />
         <div className="relative mt-14 ps-6 sm:ps-10">
@@ -474,7 +474,7 @@ export function Timeline({
 
 export function Process({ dict }: { dict: Dict }) {
   return (
-    <section className="relative py-24">
+    <section id="process" className="relative py-24">
       <div className="container-x">
         <SectionHeading
           label={dict.process.label}

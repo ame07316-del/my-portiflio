@@ -72,6 +72,13 @@ export const dict = {
         tools: "Tools",
       },
     },
+    tour: {
+      button: "Quick tour",
+      hint: "bottom → top, cinematic",
+      exit: "press esc to exit",
+      day: "Daylight",
+      night: "Nightfall",
+    },
     globe: {
       label: "Global reach",
       cities: "Cities served",
@@ -184,6 +191,13 @@ export const dict = {
         design: "التصميم",
         tools: "أدوات",
       },
+    },
+    tour: {
+      button: "نظرة سريعة",
+      hint: "من تحت لفوق · وضع سينمائي",
+      exit: "اضغط esc للخروج",
+      day: "شروق",
+      night: "غروب",
     },
     globe: {
       label: "انتشار عالمي",

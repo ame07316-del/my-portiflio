@@ -1,17 +1,20 @@
 "use client";
 
+import { useState } from "react";
 import { useActionState } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import { loginAction, type FormState } from "../actions";
-import { Alert, Input, SubmitButton } from "@/components/admin/ui";
+import { Alert, SubmitButton } from "@/components/admin/ui";
 
 const initial: FormState = {};
 
-export default function LoginForm() {
+export default function LoginForm({ brandMark = "</>" }: { brandMark?: string }) {
   const params = useSearchParams();
   const next = params.get("next") || "/admin";
+  const linkFailed = params.get("e") === "1";
   const [state, action] = useActionState(loginAction, initial);
+  const [show, setShow] = useState(false);
 
   return (
     <motion.form
@@ -26,56 +29,62 @@ export default function LoginForm() {
 
       <div className="relative">
         <span className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)] font-mono text-sm font-black text-ink">
-          {"</>"}
+          {brandMark}
         </span>
         <h1 className="mt-5 text-2xl font-black tracking-tight text-white">
           Control Center
         </h1>
         <p className="mt-1.5 text-sm text-white/45">
-          Sign in to manage your portfolio content.
+          Enter your access token to manage the site.
         </p>
 
         <input type="hidden" name="next" value={next} />
 
-        <div className="mt-7 space-y-3.5">
-          <Input
-            label="Email"
-            name="email"
-            type="email"
-            required
-            autoComplete="email"
-            placeholder="admin@portfolio.dev"
-          />
-          <Input
-            label="Password"
-            name="password"
-            type="password"
-            required
-            autoComplete="current-password"
-            placeholder="••••••••"
-          />
-        </div>
+        <label className="mt-7 block">
+          <span className="mb-1.5 block text-[11px] font-semibold tracking-wider text-white/45 uppercase">
+            Access token
+          </span>
+          <div className="relative">
+            <input
+              name="token"
+              type={show ? "text" : "password"}
+              required
+              autoFocus
+              autoComplete="one-time-code"
+              spellCheck={false}
+              placeholder="••••-••••-••••"
+              className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-3 pe-16 font-mono text-sm tracking-[0.2em] text-white outline-none transition placeholder:tracking-normal placeholder:text-white/25 focus:border-[var(--accent)]/60 focus:bg-white/[0.06]"
+            />
+            <button
+              type="button"
+              onClick={() => setShow((v) => !v)}
+              className="absolute end-2 top-1/2 -translate-y-1/2 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-white/45 transition hover:text-white"
+            >
+              {show ? "hide" : "show"}
+            </button>
+          </div>
+        </label>
 
-        {state.error && (
+        {(state.error || linkFailed) && (
           <div className="mt-4">
             <Alert tone="error">
-              {state.error === "INVALID"
-                ? "Wrong email or password."
-                : "Please fill in both fields."}
+              {state.error === "EMPTY"
+                ? "Enter your token first."
+                : "That token is not valid."}
             </Alert>
           </div>
         )}
 
         <div className="mt-6">
-          <SubmitButton pendingLabel="Signing in…" className="w-full py-3">
-            Sign in
+          <SubmitButton pendingLabel="Unlocking…" className="w-full py-3">
+            Unlock dashboard
           </SubmitButton>
         </div>
 
         <p className="mt-6 rounded-xl border border-white/8 bg-white/[0.02] px-3.5 py-3 font-mono text-[11px] leading-5 text-white/35">
-          Demo access — email: admin@portfolio.dev · password: admin1234
+          Default token: amr-portfolio-2025
           <br />
-          Change it from Account after your first login.
+          Change it from Access after signing in.
         </p>
       </div>
     </motion.form>
