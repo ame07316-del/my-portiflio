@@ -58,8 +58,26 @@ function pgConfig(url: string) {
   };
 }
 
+export class MissingDatabaseUrlError extends Error {
+  constructor() {
+    super(
+      "DATABASE_URL is not set. Serverless hosting has a read-only filesystem, " +
+        "so the embedded database cannot be used in production. Add DATABASE_URL " +
+        "(Supabase / Neon / Vercel Postgres) to your environment variables and redeploy.",
+    );
+    this.name = "MissingDatabaseUrlError";
+  }
+}
+
 async function createDriver(): Promise<Driver> {
   const url = process.env.DATABASE_URL?.trim();
+
+  // Serverless platforms cannot host the embedded database.
+  const isManagedRuntime =
+    Boolean(process.env.VERCEL) ||
+    Boolean(process.env.NETLIFY) ||
+    Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
+  if (!url && isManagedRuntime) throw new MissingDatabaseUrlError();
 
   if (url) {
     const { Pool } = await import("pg");
@@ -124,10 +142,32 @@ async function createDriver(): Promise<Driver> {
   };
 }
 
+const BOOTSTRAP_LOCK = 918_273_645;
+
 async function bootstrap(): Promise<Driver> {
   const driver = await createDriver();
-  await migrate(driver);
-  await seed(driver);
+
+  // Two cold starts can hit an empty database at the same time; an advisory
+  // lock makes migrate + seed run exactly once.
+  let locked = false;
+  try {
+    await driver.query("SELECT pg_advisory_lock($1)", [BOOTSTRAP_LOCK]);
+    locked = true;
+  } catch {
+    /* advisory locks unavailable — continue anyway */
+  }
+
+  try {
+    await migrate(driver);
+    await seed(driver);
+  } finally {
+    if (locked) {
+      await driver
+        .query("SELECT pg_advisory_unlock($1)", [BOOTSTRAP_LOCK])
+        .catch(() => undefined);
+    }
+  }
+
   return driver;
 }
 

@@ -23,6 +23,7 @@ import {
   getSettings,
   getSkills,
 } from "@/lib/queries";
+import SetupNotice from "@/components/site/SetupNotice";
 import { pick, type Lang } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -32,15 +33,23 @@ export default async function Home() {
   const lang = ((store.get(LANG_COOKIE)?.value as Lang) || "en") as Lang;
   const dict = getDict(lang);
 
-  const [settings, projects, skills, services, experiences, locations] =
-    await Promise.all([
-      getSettings(),
-      getProjects(),
-      getSkills(),
-      getServices(),
-      getExperiences(),
-      getLocations(),
-    ]);
+  let data;
+  try {
+    const [settings, projects, skills, services, experiences, locations] =
+      await Promise.all([
+        getSettings(),
+        getProjects(),
+        getSkills(),
+        getServices(),
+        getExperiences(),
+        getLocations(),
+      ]);
+    data = { settings, projects, skills, services, experiences, locations };
+  } catch (error) {
+    return <SetupNotice message={(error as Error)?.message} />;
+  }
+
+  const { settings, projects, skills, services, experiences, locations } = data;
 
   const name = pick(settings, "name", lang);
   const role = pick(settings, "role", lang);

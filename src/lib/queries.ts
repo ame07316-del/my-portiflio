@@ -1,4 +1,5 @@
 import { query, queryOne } from "@/lib/db";
+import { DEFAULT_SETTINGS } from "@/lib/defaults";
 import type {
   Experience,
   GlobeLocation,
@@ -14,6 +15,15 @@ export async function getSettings(): Promise<Settings> {
   if (row) return row;
   await query("INSERT INTO settings (id) VALUES (1) ON CONFLICT DO NOTHING");
   return (await queryOne<Settings>("SELECT * FROM settings WHERE id = 1"))!;
+}
+
+/** Never throws — falls back to defaults when the database isn't reachable. */
+export async function getSettingsSafe(): Promise<Settings> {
+  try {
+    return await getSettings();
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
 }
 
 export async function getProjects(onlyPublished = true): Promise<Project[]> {

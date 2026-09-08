@@ -104,12 +104,25 @@ download, restore-from-file and a "run migrations" button.
 
 ## ☁️ Deploy (Vercel)
 
-1. Push the repo and import it on Vercel.
-2. Add a Postgres database (Supabase / Neon / Vercel Postgres) and set `DATABASE_URL`.
-3. Set `AUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`.
-4. Deploy — the schema and seed data are created on the first request.
+1. Import the repo on <https://vercel.com/new> (framework auto-detected).
+2. Add the environment variables **before** the first deploy:
 
-> On serverless the filesystem is read-only, so `DATABASE_URL` **is required** in production.
+| Name | Value |
+|---|---|
+| `DATABASE_URL` | Supabase **Transaction pooler** URI (port 6543) + `?sslmode=require` |
+| `AUTH_SECRET` | `openssl rand -base64 32` |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | your first admin login |
+| `DATABASE_POOL_MAX` | `1` on serverless |
+| `NEXT_PUBLIC_SITE_URL` | your final domain |
+
+3. Deploy — the schema and starter content are created on the first request
+   (guarded by a Postgres advisory lock so concurrent cold starts can't double-seed).
+
+> Serverless filesystems are read-only, so `DATABASE_URL` **is required** in
+> production. Without it the site shows a friendly "Connect a database" screen
+> instead of crashing.
+
+🚀 **Step-by-step deploy guide (Arabic): [`docs/DEPLOY.ar.md`](docs/DEPLOY.ar.md)**
 
 ---
 

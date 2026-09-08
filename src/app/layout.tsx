@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import { LANG_COOKIE } from "@/lib/i18n";
 import { fontPair, googleFontsHref } from "@/lib/brand";
-import { getSettings } from "@/lib/queries";
+import { getSettingsSafe } from "@/lib/queries";
 import { pick, type Lang } from "@/lib/types";
 import "./globals.css";
 
@@ -12,7 +12,7 @@ async function currentLang(): Promise<Lang> {
 }
 
 export async function generateMetadata(): Promise<Metadata> {
-  const [lang, settings] = await Promise.all([currentLang(), getSettings()]);
+  const [lang, settings] = await Promise.all([currentLang(), getSettingsSafe()]);
   const name = pick(settings, "name", lang);
   const role = pick(settings, "role", lang);
   const title = pick(settings, "meta_title", lang) || `${name} — ${role}`;
@@ -49,7 +49,7 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [lang, settings] = await Promise.all([currentLang(), getSettings()]);
+  const [lang, settings] = await Promise.all([currentLang(), getSettingsSafe()]);
   const dir = lang === "ar" ? "rtl" : "ltr";
   const pair = fontPair(settings.font_pair);
 

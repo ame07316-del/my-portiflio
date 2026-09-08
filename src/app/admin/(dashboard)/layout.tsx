@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Sidebar from "@/components/admin/Sidebar";
 import { getSession } from "@/lib/auth";
 import { getStats } from "@/lib/queries";
+import SetupNotice from "@/components/site/SetupNotice";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,12 @@ export default async function DashboardLayout({
 }) {
   const session = await getSession();
   if (!session) redirect("/admin/login");
-  const stats = await getStats();
+  let stats;
+  try {
+    stats = await getStats();
+  } catch (error) {
+    return <SetupNotice message={(error as Error)?.message} />;
+  }
 
   return (
     <div className="relative min-h-screen bg-ink">
