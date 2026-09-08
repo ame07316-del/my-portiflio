@@ -1,0 +1,222 @@
+import type { Lang } from "@/lib/types";
+
+export const dict = {
+  en: {
+    dir: "ltr",
+    nav: {
+      home: "Home",
+      about: "About",
+      services: "Services",
+      work: "Work",
+      skills: "Skills",
+      contact: "Contact",
+      hire: "Hire me",
+      menu: "Menu",
+    },
+    loader: {
+      booting: "Booting engine",
+      compiling: "Compiling shaders",
+      loading: "Loading geometry",
+      polishing: "Polishing pixels",
+      almost: "Almost there",
+      enter: "Enter experience",
+      hint: "click anywhere",
+    },
+    hero: {
+      available: "Available for work",
+      busy: "Currently booked",
+      scroll: "Scroll to explore",
+      cta: "View my work",
+      cta2: "Let's talk",
+      roles: [
+        "Full-Stack Web Developer",
+        "Admin Dashboards Specialist",
+        "3D & Motion Enthusiast",
+        "Next.js Engineer",
+      ],
+    },
+    stats: {
+      years: "Years of experience",
+      projects: "Projects delivered",
+      clients: "Happy clients",
+      support: "Support",
+    },
+    about: {
+      label: "About me",
+      title: "I turn ideas into products that ship",
+      download: "Download CV",
+    },
+    services: {
+      label: "What I do",
+      title: "Services built around your business",
+      subtitle: "Everything you need to go from idea to a live product.",
+    },
+    work: {
+      label: "Selected work",
+      title: "Projects I've built recently",
+      subtitle: "Real, live products — visit them and try the dashboards.",
+      all: "All",
+      live: "Live preview",
+      admin: "Admin panel",
+      code: "Source",
+      view: "View project",
+    },
+    skills: {
+      label: "Capabilities",
+      title: "The stack I build with",
+      categories: {
+        frontend: "Front-end",
+        backend: "Back-end",
+        design: "Design",
+        tools: "Tools",
+      },
+    },
+    timeline: {
+      label: "Journey",
+      title: "Experience timeline",
+    },
+    process: {
+      label: "How I work",
+      title: "From brief to launch in 4 steps",
+      steps: [
+        { t: "Discover", d: "We talk about your goals, users and content." },
+        { t: "Design", d: "Wireframes then a polished UI you approve." },
+        { t: "Build", d: "Clean code, dashboard included, weekly demos." },
+        { t: "Launch", d: "Deploy, train you on the admin, then support." },
+      ],
+    },
+    contact: {
+      label: "Contact",
+      title: "Let's build something great",
+      subtitle: "Tell me about your project — I usually reply within a few hours.",
+      name: "Your name",
+      email: "Email",
+      subject: "Subject",
+      budget: "Budget (optional)",
+      message: "Tell me about your project",
+      send: "Send message",
+      sending: "Sending…",
+      success: "Message sent! I'll get back to you soon.",
+      error: "Something went wrong. Please try again.",
+      or: "or reach me directly",
+    },
+    footer: {
+      rights: "All rights reserved.",
+      built: "Designed & built with Next.js, WebGL & too much coffee.",
+      admin: "Admin",
+    },
+  },
+  ar: {
+    dir: "rtl",
+    nav: {
+      home: "الرئيسية",
+      about: "من أنا",
+      services: "الخدمات",
+      work: "الأعمال",
+      skills: "المهارات",
+      contact: "تواصل",
+      hire: "اطلب مشروعك",
+      menu: "القائمة",
+    },
+    loader: {
+      booting: "تشغيل المحرك",
+      compiling: "تجهيز الشيدرز",
+      loading: "تحميل المجسمات",
+      polishing: "تلميع التفاصيل",
+      almost: "خلصنا تقريبًا",
+      enter: "ادخل التجربة",
+      hint: "اضغط في أي مكان",
+    },
+    hero: {
+      available: "متاح لمشاريع جديدة",
+      busy: "مشغول حاليًا",
+      scroll: "انزل لتستكشف",
+      cta: "شوف أعمالي",
+      cta2: "خلينا نتكلم",
+      roles: [
+        "مطوّر ويب متكامل",
+        "متخصص لوحات تحكم",
+        "تجارب ثري دي وحركة",
+        "مهندس Next.js",
+      ],
+    },
+    stats: {
+      years: "سنوات خبرة",
+      projects: "مشروع تم تسليمه",
+      clients: "عميل سعيد",
+      support: "دعم فني",
+    },
+    about: {
+      label: "من أنا",
+      title: "بحوّل الأفكار لمنتجات شغّالة فعلًا",
+      download: "تحميل السيرة الذاتية",
+    },
+    services: {
+      label: "بعمل إيه",
+      title: "خدمات مبنية على احتياج شغلك",
+      subtitle: "كل اللي تحتاجه علشان تنقل من فكرة لمنتج على الإنترنت.",
+    },
+    work: {
+      label: "مختارات من الأعمال",
+      title: "مشاريع نفذتها مؤخرًا",
+      subtitle: "منتجات حقيقية شغالة — ادخل جربها وجرب لوحات التحكم.",
+      all: "الكل",
+      live: "معاينة مباشرة",
+      admin: "لوحة التحكم",
+      code: "الكود",
+      view: "عرض المشروع",
+    },
+    skills: {
+      label: "الإمكانيات",
+      title: "الأدوات اللي بشتغل بيها",
+      categories: {
+        frontend: "الواجهة الأمامية",
+        backend: "الخلفية",
+        design: "التصميم",
+        tools: "أدوات",
+      },
+    },
+    timeline: {
+      label: "الرحلة",
+      title: "الخبرات والمسيرة",
+    },
+    process: {
+      label: "طريقة الشغل",
+      title: "من الفكرة للإطلاق في ٤ خطوات",
+      steps: [
+        { t: "الفهم", d: "نتكلم عن هدفك وجمهورك والمحتوى المطلوب." },
+        { t: "التصميم", d: "مخططات أولية وبعدها واجهة نهائية توافق عليها." },
+        { t: "التنفيذ", d: "كود نظيف، ولوحة تحكم، وعرض أسبوعي للتقدم." },
+        { t: "الإطلاق", d: "رفع الموقع، تدريبك على اللوحة، ثم دعم مستمر." },
+      ],
+    },
+    contact: {
+      label: "تواصل",
+      title: "يلا نبني حاجة تفرق",
+      subtitle: "احكيلي عن مشروعك — بردّ عادة خلال ساعات قليلة.",
+      name: "اسمك",
+      email: "البريد الإلكتروني",
+      subject: "الموضوع",
+      budget: "الميزانية (اختياري)",
+      message: "احكيلي عن مشروعك",
+      send: "إرسال الرسالة",
+      sending: "جاري الإرسال…",
+      success: "تم إرسال رسالتك! هرد عليك قريب.",
+      error: "حصلت مشكلة، حاول تاني من فضلك.",
+      or: "أو تواصل معايا مباشرة",
+    },
+    footer: {
+      rights: "جميع الحقوق محفوظة.",
+      built: "مصمم ومبرمج بـ Next.js و WebGL وكمية قهوة كبيرة.",
+      admin: "لوحة التحكم",
+    },
+  },
+} as const;
+
+export type Dict = (typeof dict)["en"];
+
+export function getDict(lang: Lang): Dict {
+  return (dict[lang] ?? dict.en) as Dict;
+}
+
+export const LANG_COOKIE = "pf_lang";
