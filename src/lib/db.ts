@@ -19,18 +19,78 @@ interface Driver {
   exec(text: string): Promise<void>;
 }
 
+export type DbInfo = {
+  driver: "postgres" | "pglite";
+  host: string;
+  database: string;
+  version: string;
+  ssl: boolean;
+};
+
 const SCHEMA_PATH = path.join(process.cwd(), "src", "lib", "schema.sql");
 
+const globalForDb = globalThis as unknown as {
+  __pf_db?: Promise<Driver>;
+  __pf_db_info?: DbInfo;
+};
+
+/** Small helper so Supabase / Neon URLs "just work". */
+function pgConfig(url: string) {
+  const parsed = new URL(url);
+  const disableSsl =
+    parsed.hostname === "localhost" ||
+    parsed.hostname === "127.0.0.1" ||
+    parsed.searchParams.get("sslmode") === "disable";
+
+  return {
+    connectionString: url,
+    // Managed providers use certificates Node doesn't ship with.
+    ssl: disableSsl ? false : ({ rejectUnauthorized: false } as const),
+    // Serverless friendly: tiny pool, drop idle connections quickly.
+    max: Number(process.env.DATABASE_POOL_MAX ?? 3),
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 15_000,
+    keepAlive: true,
+    application_name: "portfolio",
+    host: parsed.hostname,
+    database: parsed.pathname.replace(/^\//, "") || "postgres",
+    sslEnabled: !disableSsl,
+  };
+}
+
 async function createDriver(): Promise<Driver> {
-  const url = process.env.DATABASE_URL;
+  const url = process.env.DATABASE_URL?.trim();
 
   if (url) {
     const { Pool } = await import("pg");
+    const cfg = pgConfig(url);
     const pool = new Pool({
-      connectionString: url,
-      ssl: url.includes("localhost") ? undefined : { rejectUnauthorized: false },
-      max: 5,
+      connectionString: cfg.connectionString,
+      ssl: cfg.ssl,
+      max: cfg.max,
+      idleTimeoutMillis: cfg.idleTimeoutMillis,
+      connectionTimeoutMillis: cfg.connectionTimeoutMillis,
+      keepAlive: cfg.keepAlive,
+      application_name: cfg.application_name,
     });
+    pool.on("error", (err) => {
+      console.error("[db] idle client error:", err.message);
+    });
+
+    const version = await pool
+      .query("SELECT version()")
+      .then((r) => String(r.rows[0]?.version ?? "").split(",")[0])
+      .catch(() => "PostgreSQL");
+
+    globalForDb.__pf_db_info = {
+      driver: "postgres",
+      host: cfg.host,
+      database: cfg.database,
+      version,
+      ssl: cfg.sslEnabled,
+    };
+    console.log(`[db] connected to ${cfg.host}/${cfg.database} (${version})`);
+
     return {
       async query<T>(text: string, params: unknown[] = []) {
         const res = await pool.query(text, params as never[]);
@@ -46,6 +106,13 @@ async function createDriver(): Promise<Driver> {
   const dir = path.join(process.cwd(), ".data", "pgdata");
   fs.mkdirSync(path.dirname(dir), { recursive: true });
   const lite = await PGlite.create(dir);
+  globalForDb.__pf_db_info = {
+    driver: "pglite",
+    host: ".data/pgdata",
+    database: "embedded",
+    version: "PGlite (embedded PostgreSQL)",
+    ssl: false,
+  };
   return {
     async query<T>(text: string, params: unknown[] = []) {
       const res = await lite.query(text, params as unknown[]);
@@ -59,16 +126,25 @@ async function createDriver(): Promise<Driver> {
 
 async function bootstrap(): Promise<Driver> {
   const driver = await createDriver();
-  const schema = fs.readFileSync(SCHEMA_PATH, "utf8");
-  await driver.exec(schema);
+  await migrate(driver);
   await seed(driver);
   return driver;
 }
 
-const globalForDb = globalThis as unknown as { __pf_db?: Promise<Driver> };
+/** Applies schema.sql — every statement is idempotent (IF NOT EXISTS). */
+export async function migrate(driver: Driver) {
+  const schema = fs.readFileSync(SCHEMA_PATH, "utf8");
+  await driver.exec(schema);
+}
 
 function getDriver(): Promise<Driver> {
-  if (!globalForDb.__pf_db) globalForDb.__pf_db = bootstrap();
+  if (!globalForDb.__pf_db) {
+    globalForDb.__pf_db = bootstrap().catch((err) => {
+      // let the next request retry instead of caching a dead connection
+      globalForDb.__pf_db = undefined;
+      throw err;
+    });
+  }
   return globalForDb.__pf_db;
 }
 
@@ -89,22 +165,41 @@ export async function queryOne<T = Row>(
   return rows[0] ?? null;
 }
 
+/** Internal: used by the admin “run migrations” button. */
+export async function getDriverForMigration() {
+  return getDriver();
+}
+
+/** Connection details for the admin “Database” screen. */
+export async function getDbInfo(): Promise<DbInfo> {
+  await getDriver();
+  return (
+    globalForDb.__pf_db_info ?? {
+      driver: "pglite",
+      host: "unknown",
+      database: "unknown",
+      version: "unknown",
+      ssl: false,
+    }
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Seed                                                               */
 /* ------------------------------------------------------------------ */
 
-async function seed(db: Driver) {
+export async function seed(db: Driver) {
   const { rows } = await db.query<{ count: string }>(
     "SELECT count(*)::text AS count FROM users",
   );
-  if (Number(rows[0]?.count ?? 0) > 0) return;
+  if (Number(rows[0]?.count ?? 0) > 0) return false;
 
   const email = process.env.ADMIN_EMAIL || "admin@portfolio.dev";
   const password = process.env.ADMIN_PASSWORD || "admin1234";
   const hash = await bcrypt.hash(password, 10);
   await db.query(
     "INSERT INTO users (email, password_hash, name) VALUES ($1,$2,$3) ON CONFLICT (email) DO NOTHING",
-    [email.toLowerCase(), hash, "Admin"],
+    [email.toLowerCase(), hash, "Amr"],
   );
 
   await db.query(
@@ -125,7 +220,7 @@ async function seed(db: Driver) {
       "+20 128 837 3753",
       "Cairo, Egypt",
       "القاهرة، مصر",
-      "https://github.com/",
+      "https://github.com/ame07316-del",
       "https://linkedin.com/",
       "",
       "201288373753",
@@ -315,4 +410,82 @@ async function seed(db: Driver) {
       e,
     );
   }
+
+  return true;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Backup / restore                                                   */
+/* ------------------------------------------------------------------ */
+
+export const BACKUP_TABLES = [
+  "settings",
+  "projects",
+  "skills",
+  "services",
+  "experiences",
+  "locations",
+  "messages",
+] as const;
+
+export async function exportData() {
+  const data: Record<string, Row[]> = {};
+  for (const table of BACKUP_TABLES) {
+    data[table] = await query<Row>(`SELECT * FROM ${table} ORDER BY id ASC`);
+  }
+  return {
+    exportedAt: new Date().toISOString(),
+    version: 1,
+    data,
+  };
+}
+
+export async function importData(payload: { data: Record<string, Row[]> }) {
+  const driver = await getDriver();
+  let inserted = 0;
+
+  for (const table of BACKUP_TABLES) {
+    const rows = payload.data?.[table];
+    if (!Array.isArray(rows)) continue;
+
+    if (table === "settings") {
+      const row = rows[0];
+      if (!row) continue;
+      const cols = Object.keys(row).filter((c) => c !== "id" && c !== "updated_at");
+      const sets = cols.map((c, i) => `${c} = $${i + 1}`).join(", ");
+      await driver.query(`UPDATE settings SET ${sets} WHERE id = 1`, [
+        ...cols.map((c) => normalize(row[c])),
+      ]);
+      inserted++;
+      continue;
+    }
+
+    await driver.query(`DELETE FROM ${table}`);
+    for (const row of rows) {
+      const cols = Object.keys(row).filter((c) => c !== "id");
+      if (!cols.length) continue;
+      const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
+      await driver.query(
+        `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${placeholders})`,
+        cols.map((c) => normalize(row[c])),
+      );
+      inserted++;
+    }
+    // keep the sequences in sync after restoring explicit ids
+    await driver
+      .query(
+        `SELECT setval(pg_get_serial_sequence('${table}', 'id'),
+           COALESCE((SELECT MAX(id) FROM ${table}), 1))`,
+      )
+      .catch(() => undefined);
+  }
+
+  return inserted;
+}
+
+function normalize(value: unknown) {
+  if (value && typeof value === "object" && !(value instanceof Date)) {
+    return JSON.stringify(value);
+  }
+  return value;
 }

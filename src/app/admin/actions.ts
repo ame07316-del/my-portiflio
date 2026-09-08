@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { query } from "@/lib/db";
+import { exportData, importData, migrate, query } from "@/lib/db";
 import {
   changePassword,
   createSession,
@@ -361,6 +361,40 @@ export async function deleteLocation(f: FormData) {
   await requireSession();
   await query("DELETE FROM locations WHERE id=$1", [Number(f.get("id"))]);
   refresh();
+}
+
+/* -------------------------------- database -------------------------------- */
+
+export async function runMigrations(): Promise<void> {
+  await requireSession();
+  const { getDriverForMigration } = await import("@/lib/db");
+  await migrate(await getDriverForMigration());
+  revalidatePath("/admin/database");
+}
+
+export async function restoreBackup(
+  _prev: FormState,
+  f: FormData,
+): Promise<FormState> {
+  await requireSession();
+  const file = f.get("backup");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "NO_FILE" };
+  }
+  try {
+    const parsed = JSON.parse(await file.text());
+    if (!parsed?.data) return { error: "BAD_FILE" };
+    const rows = await importData(parsed);
+    refresh();
+    return { ok: true, message: `${rows}` };
+  } catch {
+    return { error: "BAD_FILE" };
+  }
+}
+
+export async function snapshotToJson() {
+  await requireSession();
+  return JSON.stringify(await exportData(), null, 2);
 }
 
 /* --------------------------------- account -------------------------------- */

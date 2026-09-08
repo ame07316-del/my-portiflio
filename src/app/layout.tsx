@@ -21,7 +21,10 @@ export async function generateMetadata(): Promise<Metadata> {
     pick(settings, "tagline", lang) ||
     `${name}, ${role}.`;
 
+  const base = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+
   return {
+    metadataBase: new URL(base),
     title,
     description,
     icons: settings.logo_url ? { icon: settings.logo_url } : undefined,

@@ -17,7 +17,13 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (hasSession && isLogin) {
+  // Only bounce *navigations* away from the login page. Server Action POSTs
+  // (login submit) must reach the route or React receives an HTML redirect
+  // instead of an RSC payload ("An unexpected response was received").
+  const isNavigation =
+    request.method === "GET" && !request.headers.get("next-action");
+
+  if (hasSession && isLogin && isNavigation) {
     const url = request.nextUrl.clone();
     url.pathname = "/admin";
     url.search = "";

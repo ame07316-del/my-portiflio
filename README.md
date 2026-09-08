@@ -35,6 +35,8 @@ colour and project on the site.
   typeface (5 presets), hero eyebrow, SEO title & description, the two accent colours
   and the globe highlight colour — every string in EN **and** AR.
 - 👤 Account: change name, email and password.
+- 🗄 Database screen: connection status, per-table row counts, JSON backup /
+  restore and one-click migrations.
 
 ---
 
@@ -76,11 +78,27 @@ cp .env.example .env.local
 ```
 
 ```env
-DATABASE_URL="postgresql://user:pass@host:5432/db?sslmode=require"
-AUTH_SECRET="a-long-random-string"
+DATABASE_URL="postgresql://user:pass@host:6543/postgres?sslmode=require"
+AUTH_SECRET="a-long-random-string"     # openssl rand -base64 32
 ADMIN_EMAIL="you@example.com"
 ADMIN_PASSWORD="something-strong"
 ```
+
+### Database CLI
+
+| Command | What it does |
+|---|---|
+| `npm run db:check` | test the connection, list tables and row counts |
+| `npm run db:push` | create/patch every table (idempotent) |
+| `npm run db:export -- backup.json` | dump all content to JSON |
+| `npm run db:import -- backup.json` | restore content from JSON |
+| `npm run db:copy-local` | copy the local dev database into `DATABASE_URL` |
+| `npm run db:serve-local` | expose the local database as a real Postgres server on :5432 |
+
+No terminal? **Admin → Database** shows the live connection, row counts, backup
+download, restore-from-file and a "run migrations" button.
+
+📘 **Step-by-step Supabase guide (Arabic): [`docs/DATABASE.ar.md`](docs/DATABASE.ar.md)**
 
 ---
 
