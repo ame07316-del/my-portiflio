@@ -72,12 +72,14 @@ export default function Hero({
   name,
   role,
   tagline,
+  heroLabel,
 }: {
   dict: Dict;
   settings: Settings;
   name: string;
   role: string;
   tagline: string;
+  heroLabel?: string;
 }) {
   const entered = useEntered();
   const show = entered;
@@ -133,7 +135,7 @@ export default function Hero({
             style={{ fontFamily: "var(--font-display)" }}
           >
             <span className="block text-white/45 text-[0.32em] font-mono uppercase tracking-[0.5em] mb-4">
-              Portfolio 2025
+              {heroLabel || "Portfolio 2025"}
             </span>
             <span className="text-gradient">{name}</span>
           </motion.h1>

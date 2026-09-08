@@ -208,10 +208,12 @@ export default function Preloader({
   phases,
   enterLabel,
   hint,
+  brandMark = "</>",
 }: {
   phases: string[];
   enterLabel: string;
   hint: string;
+  brandMark?: string;
 }) {
   const [progress, setProgress] = useState(0);
   const [ready, setReady] = useState(false);
@@ -299,7 +301,12 @@ export default function Preloader({
           {/* HUD */}
           <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-5 sm:p-8">
             <div className="flex items-start justify-between font-mono text-[10px] uppercase tracking-[0.32em] text-white/45">
-              <span>WEBGL / RENDERER ONLINE</span>
+              <span className="flex items-center gap-2">
+                <span className="grid h-6 w-6 place-items-center rounded-md bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)] text-[10px] font-black text-ink">
+                  {brandMark}
+                </span>
+                WEBGL / RENDERER ONLINE
+              </span>
               <span className="hidden sm:block">SYS.PORTFOLIO v2.0</span>
             </div>
 

@@ -1,20 +1,39 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import { LANG_COOKIE } from "@/lib/i18n";
-import type { Lang } from "@/lib/types";
+import { fontPair, googleFontsHref } from "@/lib/brand";
+import { getSettings } from "@/lib/queries";
+import { pick, type Lang } from "@/lib/types";
 import "./globals.css";
 
-export const metadata: Metadata = {
-  title: "Portfolio — Full-Stack Web Developer",
-  description:
-    "Web developer building fast, beautiful websites, web apps and the admin dashboards that power them.",
-  openGraph: {
-    title: "Portfolio — Full-Stack Web Developer",
-    description:
-      "Websites, web apps and admin dashboards, crafted with Next.js and WebGL.",
-    type: "website",
-  },
-};
+async function currentLang(): Promise<Lang> {
+  const store = await cookies();
+  return ((store.get(LANG_COOKIE)?.value as Lang) || "en") as Lang;
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const [lang, settings] = await Promise.all([currentLang(), getSettings()]);
+  const name = pick(settings, "name", lang);
+  const role = pick(settings, "role", lang);
+  const title = pick(settings, "meta_title", lang) || `${name} — ${role}`;
+  const description =
+    pick(settings, "meta_desc", lang) ||
+    pick(settings, "tagline", lang) ||
+    `${name}, ${role}.`;
+
+  return {
+    title,
+    description,
+    icons: settings.logo_url ? { icon: settings.logo_url } : undefined,
+    openGraph: {
+      title,
+      description,
+      type: "website",
+      images: settings.avatar_url ? [settings.avatar_url] : undefined,
+    },
+    twitter: { card: "summary_large_image", title, description },
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: "#05060a",
@@ -27,9 +46,9 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const store = await cookies();
-  const lang = ((store.get(LANG_COOKIE)?.value as Lang) || "en") as Lang;
+  const [lang, settings] = await Promise.all([currentLang(), getSettings()]);
   const dir = lang === "ar" ? "rtl" : "ltr";
+  const pair = fontPair(settings.font_pair);
 
   return (
     <html lang={lang} dir={dir} className="h-full antialiased">
@@ -41,12 +60,8 @@ export default async function RootLayout({
           crossOrigin="anonymous"
         />
         {/* Loaded from the visitor's browser (works even when the build machine is offline) */}
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-        <link
-          href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;800;900&family=Inter:wght@300;400;500;600;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
-        <style>{`:root{--font-display:"Space Grotesk","Segoe UI",system-ui,sans-serif}`}</style>
+        <link href={googleFontsHref(settings.font_pair)} rel="stylesheet" />
+        <style>{`:root{--font-display:${pair.display},"Segoe UI",system-ui,sans-serif;--accent:${settings.accent};--accent-2:${settings.accent2};--gold:${settings.globe_color}}`}</style>
       </head>
       <body className="noise min-h-full bg-ink text-white/90">{children}</body>
     </html>

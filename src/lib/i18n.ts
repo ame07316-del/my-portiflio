@@ -8,6 +8,7 @@ export const dict = {
       about: "About",
       services: "Services",
       work: "Work",
+      global: "Global",
       skills: "Skills",
       contact: "Contact",
       hire: "Hire me",
@@ -71,6 +72,13 @@ export const dict = {
         tools: "Tools",
       },
     },
+    globe: {
+      label: "Global reach",
+      cities: "Cities served",
+      base: "Home base",
+      timezone: "Timezone friendly",
+      hint: "drag to spin · hover a pin",
+    },
     timeline: {
       label: "Journey",
       title: "Experience timeline",
@@ -113,6 +121,7 @@ export const dict = {
       about: "من أنا",
       services: "الخدمات",
       work: "الأعمال",
+      global: "عالميًا",
       skills: "المهارات",
       contact: "تواصل",
       hire: "اطلب مشروعك",
@@ -175,6 +184,13 @@ export const dict = {
         design: "التصميم",
         tools: "أدوات",
       },
+    },
+    globe: {
+      label: "انتشار عالمي",
+      cities: "مدينة تعاملت معها",
+      base: "المقر",
+      timezone: "أي توقيت",
+      hint: "اسحب لتدوير الكوكب · مرّر على أي نقطة",
     },
     timeline: {
       label: "الرحلة",

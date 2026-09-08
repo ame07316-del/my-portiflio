@@ -1,6 +1,7 @@
 import { query, queryOne } from "@/lib/db";
 import type {
   Experience,
+  GlobeLocation,
   Message,
   Project,
   Service,
@@ -42,6 +43,10 @@ function normalizeTags(tags: unknown): string[] {
     }
   }
   return [];
+}
+
+export function getLocations(): Promise<GlobeLocation[]> {
+  return query<GlobeLocation>("SELECT * FROM locations ORDER BY sort ASC, id ASC");
 }
 
 export function getSkills(): Promise<Skill[]> {

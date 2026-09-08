@@ -8,6 +8,7 @@ export default function PreloaderMount(props: {
   phases: string[];
   enterLabel: string;
   hint: string;
+  brandMark?: string;
 }) {
   return <Preloader {...props} />;
 }

@@ -33,6 +33,36 @@ export type Settings = {
   years: number;
   clients: number;
   projects_done: number;
+  /* --- brand identity --- */
+  brand_mark: string;
+  logo_url: string;
+  avatar_url: string;
+  hero_label_en: string;
+  hero_label_ar: string;
+  meta_title_en: string;
+  meta_title_ar: string;
+  meta_desc_en: string;
+  meta_desc_ar: string;
+  font_pair: string;
+  /* --- globe --- */
+  show_globe: boolean;
+  globe_title_en: string;
+  globe_title_ar: string;
+  globe_desc_en: string;
+  globe_desc_ar: string;
+  globe_color: string;
+};
+
+export type GlobeLocation = {
+  id: number;
+  label_en: string;
+  label_ar: string;
+  caption: string;
+  lat: number;
+  lng: number;
+  avatar: string;
+  is_home: boolean;
+  sort: number;
 };
 
 export type Project = {

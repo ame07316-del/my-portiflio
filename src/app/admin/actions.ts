@@ -289,6 +289,10 @@ export async function saveSettings(
       about_en=$7,about_ar=$8,email=$9,phone=$10,location_en=$11,location_ar=$12,
       github=$13,linkedin=$14,twitter=$15,whatsapp=$16,resume_url=$17,
       accent=$18,accent2=$19,available=$20,years=$21,clients=$22,projects_done=$23,
+      brand_mark=$24,logo_url=$25,avatar_url=$26,hero_label_en=$27,hero_label_ar=$28,
+      meta_title_en=$29,meta_title_ar=$30,meta_desc_en=$31,meta_desc_ar=$32,font_pair=$33,
+      show_globe=$34,globe_title_en=$35,globe_title_ar=$36,globe_desc_en=$37,globe_desc_ar=$38,
+      globe_color=$39,
       updated_at=now()
      WHERE id=1`,
     [
@@ -299,10 +303,64 @@ export async function saveSettings(
       s("accent2") || "#a855f7", f.get("available") === "on",
       Number(f.get("years") ?? 0), Number(f.get("clients") ?? 0),
       Number(f.get("projects_done") ?? 0),
+      s("brand_mark") || "</>", s("logo_url"), s("avatar_url") || "/avatar.png",
+      s("hero_label_en"), s("hero_label_ar"),
+      s("meta_title_en"), s("meta_title_ar"), s("meta_desc_en"), s("meta_desc_ar"),
+      s("font_pair") || "grotesk",
+      f.get("show_globe") === "on",
+      s("globe_title_en"), s("globe_title_ar"), s("globe_desc_en"), s("globe_desc_ar"),
+      s("globe_color") || "#e9c98b",
     ],
   );
   refresh();
   return { ok: true, message: "SAVED" };
+}
+
+/* -------------------------------- locations ------------------------------- */
+
+export async function saveLocation(
+  _prev: FormState,
+  f: FormData,
+): Promise<FormState> {
+  await requireSession();
+  const id = Number(f.get("id") ?? 0);
+  const label_en = String(f.get("label_en") ?? "").trim();
+  if (!label_en) return { error: "LABEL_REQUIRED" };
+  const data = [
+    label_en,
+    String(f.get("label_ar") ?? ""),
+    String(f.get("caption") ?? ""),
+    Number(f.get("lat") ?? 0),
+    Number(f.get("lng") ?? 0),
+    String(f.get("avatar") ?? ""),
+    f.get("is_home") === "on",
+    Number(f.get("sort") ?? 0),
+  ];
+  if (id) {
+    await query(
+      `UPDATE locations SET label_en=$1,label_ar=$2,caption=$3,lat=$4,lng=$5,
+        avatar=$6,is_home=$7,sort=$8 WHERE id=$9`,
+      [...data, id],
+    );
+  } else {
+    await query(
+      `INSERT INTO locations (label_en,label_ar,caption,lat,lng,avatar,is_home,sort)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      data,
+    );
+  }
+  // only one home base
+  if (data[6]) {
+    await query("UPDATE locations SET is_home = false WHERE label_en <> $1", [label_en]);
+  }
+  refresh();
+  return { ok: true };
+}
+
+export async function deleteLocation(f: FormData) {
+  await requireSession();
+  await query("DELETE FROM locations WHERE id=$1", [Number(f.get("id"))]);
+  refresh();
 }
 
 /* --------------------------------- account -------------------------------- */

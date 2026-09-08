@@ -85,10 +85,11 @@ export function About({
             <div className="absolute -inset-4 rounded-[2rem] bg-gradient-to-br from-[var(--accent)]/25 to-[var(--accent-2)]/25 blur-2xl" />
             <div className="relative overflow-hidden rounded-[1.6rem] border border-white/10">
               <Image
-                src="/avatar.png"
-                alt=""
+                src={settings.avatar_url || "/avatar.png"}
+                alt={pick(settings, "name", lang)}
                 width={640}
                 height={640}
+                unoptimized={/^https?:/.test(settings.avatar_url)}
                 className="h-full w-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-ink via-transparent to-transparent" />

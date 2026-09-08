@@ -22,11 +22,17 @@ export function Nav({
   lang,
   name,
   cvUrl,
+  brandMark = "</>",
+  logoUrl = "",
+  showGlobe = false,
 }: {
   dict: Dict;
   lang: Lang;
   name: string;
   cvUrl?: string;
+  brandMark?: string;
+  logoUrl?: string;
+  showGlobe?: boolean;
 }) {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
@@ -43,6 +49,7 @@ export function Nav({
     { href: "#about", label: dict.nav.about },
     { href: "#services", label: dict.nav.services },
     { href: "#work", label: dict.nav.work },
+    ...(showGlobe ? [{ href: "#global", label: dict.nav.global }] : []),
     { href: "#skills", label: dict.nav.skills },
     { href: "#contact", label: dict.nav.contact },
   ];
@@ -63,8 +70,13 @@ export function Nav({
           }`}
         >
           <a href="#top" className="group flex items-center gap-2.5">
-            <span className="relative grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)] font-mono text-sm font-black text-ink">
-              {"</>"}
+            <span className="relative grid h-9 w-9 place-items-center overflow-hidden rounded-xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)] font-mono text-sm font-black text-ink">
+              {logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={logoUrl} alt={name} className="h-full w-full object-cover" />
+              ) : (
+                brandMark
+              )}
               <span className="absolute inset-0 rounded-xl bg-[var(--accent)] opacity-0 blur-md transition group-hover:opacity-60" />
             </span>
             <span className="hidden text-sm font-bold tracking-tight sm:block">

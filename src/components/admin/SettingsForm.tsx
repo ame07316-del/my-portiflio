@@ -6,10 +6,12 @@ import {
   Alert,
   Card,
   Input,
+  Select,
   SubmitButton,
   Textarea,
   Toggle,
 } from "@/components/admin/ui";
+import { FONT_PAIRS } from "@/lib/brand";
 import type { Settings } from "@/lib/types";
 
 const initial: FormState = {};
@@ -20,6 +22,52 @@ export default function SettingsForm({ settings }: { settings: Settings }) {
 
   return (
     <form action={action} className="space-y-5">
+      <Card
+        title="Brand identity"
+        desc="Logo, monogram, avatar and the typeface of the whole site."
+      >
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Input
+            label="Monogram"
+            name="brand_mark"
+            defaultValue={s.brand_mark}
+            hint="Shown in the logo badge when no logo image is set."
+          />
+          <Input
+            label="Logo image URL"
+            name="logo_url"
+            defaultValue={s.logo_url}
+            placeholder="/logo.png"
+            hint="Also used as the browser tab icon."
+          />
+          <Input
+            label="Portrait / avatar"
+            name="avatar_url"
+            defaultValue={s.avatar_url}
+            placeholder="/avatar.png"
+          />
+          <Input
+            label="Hero eyebrow (EN)"
+            name="hero_label_en"
+            defaultValue={s.hero_label_en}
+            placeholder="Portfolio 2025"
+          />
+          <Input
+            label="Hero eyebrow (AR)"
+            name="hero_label_ar"
+            defaultValue={s.hero_label_ar}
+            dir="rtl"
+          />
+          <Select label="Display typeface" name="font_pair" defaultValue={s.font_pair}>
+            {Object.entries(FONT_PAIRS).map(([key, pair]) => (
+              <option key={key} value={key}>
+                {pair.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+      </Card>
+
       <Card title="Identity" desc="Shown in the hero, nav and footer.">
         <div className="grid gap-4 sm:grid-cols-2">
           <Input label="Name (EN)" name="name_en" defaultValue={s.name_en} />
@@ -88,6 +136,69 @@ export default function SettingsForm({ settings }: { settings: Settings }) {
           />
           <Input label="Happy clients" name="clients" type="number" defaultValue={s.clients} />
           <Toggle label="Available for work" name="available" defaultChecked={s.available} />
+        </div>
+      </Card>
+
+      <Card
+        title="SEO / browser tab"
+        desc="Leave empty to auto-generate from your name and job title."
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Input label="Page title (EN)" name="meta_title_en" defaultValue={s.meta_title_en} />
+          <Input
+            label="Page title (AR)"
+            name="meta_title_ar"
+            defaultValue={s.meta_title_ar}
+            dir="rtl"
+          />
+          <Textarea
+            label="Meta description (EN)"
+            name="meta_desc_en"
+            defaultValue={s.meta_desc_en}
+          />
+          <Textarea
+            label="Meta description (AR)"
+            name="meta_desc_ar"
+            defaultValue={s.meta_desc_ar}
+            dir="rtl"
+          />
+        </div>
+      </Card>
+
+      <Card
+        title="3D globe section"
+        desc="Manage the pins themselves in Admin → Globe locations."
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Input label="Title (EN)" name="globe_title_en" defaultValue={s.globe_title_en} />
+          <Input
+            label="Title (AR)"
+            name="globe_title_ar"
+            defaultValue={s.globe_title_ar}
+            dir="rtl"
+          />
+          <Textarea label="Text (EN)" name="globe_desc_en" defaultValue={s.globe_desc_en} />
+          <Textarea
+            label="Text (AR)"
+            name="globe_desc_ar"
+            defaultValue={s.globe_desc_ar}
+            dir="rtl"
+          />
+          <Toggle label="Show the globe section" name="show_globe" defaultChecked={s.show_globe} />
+          <label className="block">
+            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-white/45">
+              Globe highlight (home pin & arcs)
+            </span>
+            <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+              <input
+                type="color"
+                name="globe_color"
+                defaultValue={s.globe_color}
+                className="h-9 w-14 cursor-pointer rounded-lg bg-transparent"
+              />
+              <span className="font-mono text-xs text-white/50">{s.globe_color}</span>
+            </div>
+          </label>
         </div>
       </Card>
 

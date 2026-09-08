@@ -113,24 +113,42 @@ async function seed(db: Driver) {
      VALUES (1,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
      ON CONFLICT (id) DO NOTHING`,
     [
-      "Your Name",
-      "اسمك هنا",
+      "Amr",
+      "عمرو",
       "Full-Stack Web Developer",
       "مطوّر ويب متكامل",
       "I build fast, beautiful web products — from pixel-perfect interfaces to the admin dashboards that run them.",
       "بصمم وأبرمج مواقع سريعة وجميلة — من الواجهة المتقنة لحد لوحة التحكم اللي بتدير كل حاجة.",
       "I'm a web developer focused on turning ideas into production-ready products. I work end-to-end: interface design, front-end engineering, APIs, databases and the admin panels clients actually use every day. Recent work includes an interactive restaurant menu with a full management dashboard, a gym & fitness platform with member administration, and a real-estate listing hub.",
       "مطوّر ويب متخصص في تحويل الأفكار لمنتجات جاهزة للإطلاق. بشتغل على المشروع من أوله لآخره: تصميم الواجهة، برمجة الفرونت إند، الـ APIs، قواعد البيانات، ولوحات التحكم اللي العميل بيستخدمها كل يوم. من آخر أعمالي: منيو مطعم تفاعلي بلوحة إدارة كاملة، منصة جيم ولياقة بنظام إدارة أعضاء، ومنصة عقارات.",
-      "hello@yourdomain.com",
-      "+20 100 000 0000",
+      "ame07316@gmail.com",
+      "+20 128 837 3753",
       "Cairo, Egypt",
       "القاهرة، مصر",
       "https://github.com/",
       "https://linkedin.com/",
       "",
-      "201000000000",
+      "201288373753",
     ],
   );
+
+  const locations: Array<[string, string, string, number, number, boolean, number]> = [
+    ["Cairo", "القاهرة", "Home base", 30.0444, 31.2357, true, 1],
+    ["Dubai", "دبي", "Client", 25.2048, 55.2708, false, 2],
+    ["Riyadh", "الرياض", "Client", 24.7136, 46.6753, false, 3],
+    ["London", "لندن", "Client", 51.5074, -0.1278, false, 4],
+    ["Berlin", "برلين", "Client", 52.52, 13.405, false, 5],
+    ["New York", "نيويورك", "Client", 40.7128, -74.006, false, 6],
+    ["Toronto", "تورونتو", "Client", 43.6532, -79.3832, false, 7],
+    ["Singapore", "سنغافورة", "Client", 1.3521, 103.8198, false, 8],
+  ];
+  for (const l of locations) {
+    await db.query(
+      `INSERT INTO locations (label_en, label_ar, caption, lat, lng, is_home, sort)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      l,
+    );
+  }
 
   const projects: Array<[string, string, string, string, string, string, string, string[], string, string, string, string, number, boolean, number]> = [
     [

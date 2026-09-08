@@ -17,6 +17,9 @@ colour and project on the site.
 - 🔮 **Hero scene** — custom GLSL noise-displaced orb with fresnel iridescence, particle
   dust and orbit rings, all reacting to the mouse.
 - 🌍 **EN / AR switch** — one click, cookie-persisted, `dir="rtl"` applied at the root.
+- 🌐 **Luxury 3D globe** — dotted-earth (4,067 pre-computed land dots), fresnel
+  atmosphere, gold great-circle arcs from your home base, pulsing interactive pins
+  with labels/avatars, drag to spin. Pins are managed from the dashboard.
 - 🎞️ Scroll reveals, custom cursor, scroll progress, tech marquee, 3D tilt project cards,
   animated skill bars, timeline, process, contact form.
 - 📱 Fully responsive and reduced-motion friendly.
@@ -26,10 +29,11 @@ colour and project on the site.
 - 📊 Overview with live stats, recent messages and a setup checklist.
 - 🗂 Projects CRUD: bilingual content, tags, cover image, live/admin/repo links,
   reorder, feature & publish toggles.
-- 🧩 Skills, Services and Experience managers (inline editing).
+- 🧩 Skills, Services, Experience and **Globe locations** managers (inline editing).
 - 📬 Inbox for contact-form messages: read/unread, reply, delete.
-- 🎨 Site settings: every hero/about/contact string in both languages + the two accent
-  colours that drive the whole theme and the 3D scenes.
+- 🎨 **Full brand identity**: monogram/logo image (also the favicon), portrait, display
+  typeface (5 presets), hero eyebrow, SEO title & description, the two accent colours
+  and the globe highlight colour — every string in EN **and** AR.
 - 👤 Account: change name, email and password.
 
 ---
@@ -114,6 +118,25 @@ src/
 │  └─ admin/                   # dashboard UI + managers
 ├─ lib/                        # db, auth, queries, i18n, types, schema.sql
 └─ proxy.ts                    # /admin route protection
+```
+
+## 🌐 The globe
+
+`src/components/ui/3d-globe.tsx` is a standalone component:
+
+```tsx
+<Globe3D
+  markers={[{ lat: 30.0444, lng: 31.2357, label: "Cairo", home: true }]}
+  config={{ atmosphereColor: "#4da6ff", atmosphereIntensity: 20, bumpScale: 5, autoRotateSpeed: 0.3 }}
+  onMarkerClick={(m) => console.log(m.label)}
+  onMarkerHover={(m) => console.log(m?.label)}
+/>
+```
+
+The land dot-matrix is generated once from Natural Earth data:
+
+```bash
+node scripts/build-globe-dots.mjs   # -> public/globe-dots.json
 ```
 
 ## 🖼 Replacing the placeholder art

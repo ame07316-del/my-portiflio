@@ -99,3 +99,35 @@ CREATE TABLE IF NOT EXISTS messages (
   is_read    BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS locations (
+  id       SERIAL PRIMARY KEY,
+  label_en TEXT NOT NULL,
+  label_ar TEXT NOT NULL DEFAULT '',
+  caption  TEXT NOT NULL DEFAULT '',
+  lat      DOUBLE PRECISION NOT NULL DEFAULT 0,
+  lng      DOUBLE PRECISION NOT NULL DEFAULT 0,
+  avatar   TEXT NOT NULL DEFAULT '',
+  is_home  BOOLEAN NOT NULL DEFAULT false,
+  sort     INT NOT NULL DEFAULT 0
+);
+
+-- ---------------------------------------------------------------------------
+-- Incremental migrations (safe to re-run)
+-- ---------------------------------------------------------------------------
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS brand_mark     TEXT NOT NULL DEFAULT '</>';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS logo_url       TEXT NOT NULL DEFAULT '';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS avatar_url     TEXT NOT NULL DEFAULT '/avatar.png';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS hero_label_en  TEXT NOT NULL DEFAULT 'Portfolio 2025';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS hero_label_ar  TEXT NOT NULL DEFAULT 'أعمالي 2025';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS meta_title_en  TEXT NOT NULL DEFAULT '';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS meta_title_ar  TEXT NOT NULL DEFAULT '';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS meta_desc_en   TEXT NOT NULL DEFAULT '';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS meta_desc_ar   TEXT NOT NULL DEFAULT '';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS font_pair      TEXT NOT NULL DEFAULT 'grotesk';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS show_globe     BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS globe_title_en TEXT NOT NULL DEFAULT 'Working with clients worldwide';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS globe_title_ar TEXT NOT NULL DEFAULT 'بشتغل مع عملاء حول العالم';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS globe_desc_en  TEXT NOT NULL DEFAULT 'Remote-first, timezone friendly. Based in Cairo, shipping products for teams across the globe.';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS globe_desc_ar  TEXT NOT NULL DEFAULT 'بشتغل أونلاين مع أي توقيت. مقري القاهرة، وبسلّم مشاريع لعملاء في كل مكان.';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS globe_color    TEXT NOT NULL DEFAULT '#e9c98b';

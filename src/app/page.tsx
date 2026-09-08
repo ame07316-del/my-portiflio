@@ -14,8 +14,10 @@ import {
   Work,
 } from "@/components/site/Sections";
 import { getDict, LANG_COOKIE } from "@/lib/i18n";
+import GlobeSection from "@/components/site/GlobeSection";
 import {
   getExperiences,
+  getLocations,
   getProjects,
   getServices,
   getSettings,
@@ -30,13 +32,15 @@ export default async function Home() {
   const lang = ((store.get(LANG_COOKIE)?.value as Lang) || "en") as Lang;
   const dict = getDict(lang);
 
-  const [settings, projects, skills, services, experiences] = await Promise.all([
-    getSettings(),
-    getProjects(),
-    getSkills(),
-    getServices(),
-    getExperiences(),
-  ]);
+  const [settings, projects, skills, services, experiences, locations] =
+    await Promise.all([
+      getSettings(),
+      getProjects(),
+      getSkills(),
+      getServices(),
+      getExperiences(),
+      getLocations(),
+    ]);
 
   const name = pick(settings, "name", lang);
   const role = pick(settings, "role", lang);
@@ -53,6 +57,7 @@ export default async function Home() {
         {
           "--accent": settings.accent,
           "--accent-2": settings.accent2,
+          "--gold": settings.globe_color,
         } as React.CSSProperties
       }
     >
@@ -66,10 +71,19 @@ export default async function Home() {
         ]}
         enterLabel={dict.loader.enter}
         hint={dict.loader.hint}
+        brandMark={settings.brand_mark}
       />
       <ScrollProgress />
       <Cursor />
-      <Nav dict={dict} lang={lang} name={name} cvUrl={settings.resume_url} />
+      <Nav
+        dict={dict}
+        lang={lang}
+        name={name}
+        cvUrl={settings.resume_url}
+        brandMark={settings.brand_mark}
+        logoUrl={settings.logo_url}
+        showGlobe={settings.show_globe && locations.length > 0}
+      />
 
       <Hero
         dict={dict}
@@ -77,11 +91,20 @@ export default async function Home() {
         name={name}
         role={role}
         tagline={tagline}
+        heroLabel={pick(settings, "hero_label", lang)}
       />
       <Marquee items={marquee} />
       <About dict={dict} settings={settings} lang={lang} about={about} />
       <Services dict={dict} services={services} lang={lang} />
       <Work dict={dict} projects={projects} lang={lang} />
+      {settings.show_globe && (
+        <GlobeSection
+          dict={dict}
+          settings={settings}
+          locations={locations}
+          lang={lang}
+        />
+      )}
       <Skills dict={dict} skills={skills} />
       <Timeline dict={dict} items={experiences} lang={lang} />
       <Process dict={dict} />
