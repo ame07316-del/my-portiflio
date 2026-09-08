@@ -15,7 +15,7 @@ const TRAVEL = 1250; // move between two sections
 const HOLD = 1500; // stay on a section
 const CLIMB_HOME = 1400;
 
-const SEEN_KEY = "pf_tour_seen";
+const SEEN_KEY = "pf_tour_v2";
 
 export default function QuickTour({
   label,
@@ -106,8 +106,9 @@ export default function QuickTour({
     window.addEventListener("touchmove", block, { passive: false });
     window.addEventListener("keydown", keys, { passive: false });
 
+    // Reduced motion keeps the guided stops, it only removes the gliding.
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const k = reduced ? 0.15 : 1;
+    const travel = reduced ? 0 : TRAVEL;
 
     // bottom → top, one section at a time
     const stops = [...sections].reverse();
@@ -115,8 +116,11 @@ export default function QuickTour({
     try {
       // 1. fall all the way down
       setCaption(stops[0]?.label ?? "");
-      await glideTo(document.body.scrollHeight - window.innerHeight, DIVE * k);
-      if (!cancelled.current) await sleep(HOLD_BOTTOM * k);
+      await glideTo(
+        document.body.scrollHeight - window.innerHeight,
+        reduced ? 0 : DIVE,
+      );
+      if (!cancelled.current) await sleep(HOLD_BOTTOM);
 
       // 2. climb back up, pausing on every section
       for (let i = 0; i < stops.length; i++) {
@@ -125,14 +129,14 @@ export default function QuickTour({
         if (y === null) continue;
         setStep(i + 1);
         setCaption(stops[i].label);
-        await glideTo(y, TRAVEL * k);
+        await glideTo(y, travel);
         if (cancelled.current) break;
-        await sleep(HOLD * k);
+        await sleep(HOLD);
       }
 
       // 3. land softly at the top
       setCaption("");
-      await glideTo(0, cancelled.current ? 700 : CLIMB_HOME * k);
+      await glideTo(0, cancelled.current ? 700 : reduced ? 0 : CLIMB_HOME);
       await sleep(220);
     } finally {
       window.removeEventListener("wheel", block);
@@ -143,6 +147,7 @@ export default function QuickTour({
       setCaption("");
       setStep(0);
       running.current = false;
+      setShowButton(true);
       try {
         sessionStorage.setItem(SEEN_KEY, "1");
       } catch {}
@@ -152,35 +157,45 @@ export default function QuickTour({
   /* ------------------ auto-start once, right after loading ---------------- */
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("tour") === "0") return;
+    const forced = params.get("tour") === "1";
+
     let seen = false;
     try {
       seen = sessionStorage.getItem(SEEN_KEY) === "1";
     } catch {}
+    if (seen && !forced) return;
 
-    if (seen) return;
-
+    let stop = false;
     let timer = 0;
-    let started = false;
-    const kickoff = () => {
-      if (started) return;
-      started = true;
-      // let the preloader finish its exit animation first
-      timer = window.setTimeout(() => {
-        if (window.scrollY < 40 && !document.body.classList.contains("is-locked")) {
-          runTour();
-        }
-      }, 1900);
+    let unlockedAt = 0;
+    let tries = 0;
+
+    // Waits for the preloader to hand over, then starts by itself.
+    const attempt = () => {
+      if (stop || running.current) return;
+      tries++;
+
+      const locked = document.body.classList.contains("is-locked");
+      const scrollable = document.body.scrollHeight - window.innerHeight > 400;
+
+      if (locked || !scrollable) {
+        unlockedAt = 0;
+      } else if (!unlockedAt) {
+        unlockedAt = performance.now();
+      } else if (performance.now() - unlockedAt > 1300) {
+        if (window.scrollY < 260 || forced) runTour();
+        return;
+      }
+
+      if (tries < 90) timer = window.setTimeout(attempt, 400);
     };
 
-    // the 3D preloader emits this the moment the visitor enters the site
-    window.addEventListener("pf:entered", kickoff, { once: true });
-    // …and a safety net in case the preloader never mounts
-    const fallback = window.setTimeout(kickoff, 9000);
-
+    timer = window.setTimeout(attempt, 800);
     return () => {
+      stop = true;
       window.clearTimeout(timer);
-      window.clearTimeout(fallback);
-      window.removeEventListener("pf:entered", kickoff);
     };
   }, [runTour]);
 
@@ -189,12 +204,18 @@ export default function QuickTour({
   useEffect(() => {
     const onScroll = () => {
       if (running.current) return;
-      setShowButton(window.scrollY > 240);
+      if (window.scrollY > 240) setShowButton(true);
     };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+    // manual trigger: window.dispatchEvent(new Event("pf:tour"))
+    const manual = () => runTour();
+    window.addEventListener("pf:tour", manual);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("pf:tour", manual);
+    };
+  }, [runTour]);
 
   const total = sections.length;
 
