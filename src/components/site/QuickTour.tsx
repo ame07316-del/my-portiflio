@@ -7,102 +7,94 @@ type TourSection = { id: string; label: string };
 
 const easeInOutCubic = (t: number) =>
   t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-const easeInOutSine = (t: number) => -(Math.cos(Math.PI * t) - 1) / 2;
+
+/* timings (ms) */
+const DIVE = 2100; // fall to the very bottom
+const HOLD_BOTTOM = 900;
+const TRAVEL = 1250; // move between two sections
+const HOLD = 1500; // stay on a section
+const CLIMB_HOME = 1400;
+
+const SEEN_KEY = "pf_tour_seen";
 
 export default function QuickTour({
   label,
   hint,
   exitLabel,
+  skipLabel,
+  replayLabel,
   sections,
 }: {
   label: string;
   hint: string;
   exitLabel: string;
+  skipLabel: string;
+  replayLabel: string;
   sections: TourSection[];
 }) {
-  const [visible, setVisible] = useState(false);
+  const [showButton, setShowButton] = useState(false);
   const [touring, setTouring] = useState(false);
+  const [step, setStep] = useState(0);
   const [caption, setCaption] = useState("");
-  const [progress, setProgress] = useState(0);
   const cancelled = useRef(false);
-  const touringRef = useRef(false);
+  const running = useRef(false);
 
-  /* the button only appears once the visitor starts scrolling */
-  useEffect(() => {
-    const onScroll = () => {
-      if (touringRef.current) return;
-      setVisible(window.scrollY > 240);
-    };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+  /* ------------------------------- helpers ------------------------------- */
 
-  const captionFor = useCallback(
-    (y: number) => {
-      const center = y + window.innerHeight / 2;
-      let best = "";
-      let bestDist = Infinity;
-      for (const s of sections) {
-        const el = document.getElementById(s.id);
-        if (!el) continue;
-        const rect = el.getBoundingClientRect();
-        const top = rect.top + window.scrollY;
-        const mid = top + rect.height / 2;
-        const dist = Math.abs(mid - center);
-        if (dist < bestDist) {
-          bestDist = dist;
-          best = s.label;
-        }
-      }
-      return best;
-    },
-    [sections],
-  );
+  const sleep = (ms: number) =>
+    new Promise<void>((resolve) => {
+      const t0 = performance.now();
+      const tick = (now: number) => {
+        if (cancelled.current || now - t0 >= ms) resolve();
+        else requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
 
-  const scrollTo = useCallback(
-    (target: number, duration: number, ease: (t: number) => number) =>
+  const glideTo = useCallback(
+    (target: number, duration: number) =>
       new Promise<void>((resolve) => {
         const start = window.scrollY;
         const delta = target - start;
-        if (Math.abs(delta) < 2 || duration <= 0) {
-          window.scrollTo(0, target);
+        if (Math.abs(delta) < 2) {
           resolve();
           return;
         }
         const t0 = performance.now();
-        let lastCaption = 0;
-
-        const step = (now: number) => {
+        const step_ = (now: number) => {
           if (cancelled.current) {
             resolve();
             return;
           }
           const t = Math.min(1, (now - t0) / duration);
-          const y = start + delta * ease(t);
-          window.scrollTo(0, y);
-
-          const max = document.body.scrollHeight - window.innerHeight;
-          setProgress(max > 0 ? 1 - y / max : 0);
-          if (now - lastCaption > 160) {
-            lastCaption = now;
-            setCaption(captionFor(y));
-          }
-
-          if (t < 1) requestAnimationFrame(step);
+          window.scrollTo(0, start + delta * easeInOutCubic(t));
+          if (t < 1) requestAnimationFrame(step_);
           else resolve();
         };
-        requestAnimationFrame(step);
+        requestAnimationFrame(step_);
       }),
-    [captionFor],
+    [],
   );
 
+  const centerOf = (id: string) => {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    const top = rect.top + window.scrollY;
+    const max = document.body.scrollHeight - window.innerHeight;
+    const wanted = top + rect.height / 2 - window.innerHeight / 2;
+    return Math.max(0, Math.min(max, wanted));
+  };
+
+  /* -------------------------------- the tour ------------------------------ */
+
   const runTour = useCallback(async () => {
-    if (touringRef.current) return;
-    touringRef.current = true;
+    if (running.current) return;
+    running.current = true;
     cancelled.current = false;
     setTouring(true);
-    setVisible(false);
+    setShowButton(false);
+    setStep(0);
     document.body.classList.add("is-touring");
 
     const block = (e: Event) => e.preventDefault();
@@ -115,17 +107,33 @@ export default function QuickTour({
     window.addEventListener("keydown", keys, { passive: false });
 
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const max = () => document.body.scrollHeight - window.innerHeight;
+    const k = reduced ? 0.15 : 1;
+
+    // bottom → top, one section at a time
+    const stops = [...sections].reverse();
 
     try {
-      // 1. dive to the very bottom
-      await scrollTo(max(), reduced ? 0 : 1500, easeInOutCubic);
-      await new Promise((r) => setTimeout(r, reduced ? 0 : 420));
-      // 2. cinematic climb all the way back up
-      await scrollTo(0, reduced ? 0 : 7600, easeInOutSine);
-      // 3. settle at the top
-      if (cancelled.current) await scrollTo(0, 650, easeInOutCubic);
-      await new Promise((r) => setTimeout(r, 260));
+      // 1. fall all the way down
+      setCaption(stops[0]?.label ?? "");
+      await glideTo(document.body.scrollHeight - window.innerHeight, DIVE * k);
+      if (!cancelled.current) await sleep(HOLD_BOTTOM * k);
+
+      // 2. climb back up, pausing on every section
+      for (let i = 0; i < stops.length; i++) {
+        if (cancelled.current) break;
+        const y = centerOf(stops[i].id);
+        if (y === null) continue;
+        setStep(i + 1);
+        setCaption(stops[i].label);
+        await glideTo(y, TRAVEL * k);
+        if (cancelled.current) break;
+        await sleep(HOLD * k);
+      }
+
+      // 3. land softly at the top
+      setCaption("");
+      await glideTo(0, cancelled.current ? 700 : CLIMB_HOME * k);
+      await sleep(220);
     } finally {
       window.removeEventListener("wheel", block);
       window.removeEventListener("touchmove", block);
@@ -133,17 +141,67 @@ export default function QuickTour({
       document.body.classList.remove("is-touring");
       setTouring(false);
       setCaption("");
-      setProgress(0);
-      touringRef.current = false;
-      setVisible(window.scrollY > 240);
+      setStep(0);
+      running.current = false;
+      try {
+        sessionStorage.setItem(SEEN_KEY, "1");
+      } catch {}
     }
-  }, [scrollTo]);
+  }, [glideTo, sections]);
+
+  /* ------------------ auto-start once, right after loading ---------------- */
+
+  useEffect(() => {
+    let seen = false;
+    try {
+      seen = sessionStorage.getItem(SEEN_KEY) === "1";
+    } catch {}
+
+    if (seen) return;
+
+    let timer = 0;
+    let started = false;
+    const kickoff = () => {
+      if (started) return;
+      started = true;
+      // let the preloader finish its exit animation first
+      timer = window.setTimeout(() => {
+        if (window.scrollY < 40 && !document.body.classList.contains("is-locked")) {
+          runTour();
+        }
+      }, 1900);
+    };
+
+    // the 3D preloader emits this the moment the visitor enters the site
+    window.addEventListener("pf:entered", kickoff, { once: true });
+    // …and a safety net in case the preloader never mounts
+    const fallback = window.setTimeout(kickoff, 9000);
+
+    return () => {
+      window.clearTimeout(timer);
+      window.clearTimeout(fallback);
+      window.removeEventListener("pf:entered", kickoff);
+    };
+  }, [runTour]);
+
+  /* --------------- the replay button, revealed while scrolling ------------ */
+
+  useEffect(() => {
+    const onScroll = () => {
+      if (running.current) return;
+      setShowButton(window.scrollY > 240);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const total = sections.length;
 
   return (
     <>
-      {/* the hidden button — revealed by scrolling */}
       <AnimatePresence>
-        {visible && !touring && (
+        {showButton && !touring && (
           <motion.button
             type="button"
             onClick={runTour}
@@ -154,10 +212,10 @@ export default function QuickTour({
             whileHover={{ scale: 1.04 }}
             whileTap={{ scale: 0.97 }}
             className="group fixed bottom-6 end-6 z-50 flex items-center gap-3 rounded-full border border-white/12 bg-white/[0.06] py-2.5 pe-5 ps-2.5 backdrop-blur-xl"
-            aria-label={label}
+            aria-label={replayLabel}
           >
             <span className="relative grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)]">
-              <span className="absolute inset-0 animate-ping rounded-full bg-[var(--accent)] opacity-25" />
+              <span className="absolute inset-0 animate-ping rounded-full bg-[var(--accent)] opacity-20" />
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -167,7 +225,7 @@ export default function QuickTour({
                 strokeLinejoin="round"
                 className="relative h-4 w-4 text-ink"
               >
-                <path d="M12 5v14M6 13l6 6 6-6" />
+                <path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" />
               </svg>
             </span>
             <span className="text-start leading-tight">
@@ -180,7 +238,6 @@ export default function QuickTour({
         )}
       </AnimatePresence>
 
-      {/* cinematic frame while the tour is running */}
       <AnimatePresence>
         {touring && (
           <>
@@ -189,49 +246,79 @@ export default function QuickTour({
               initial={{ y: "-100%" }}
               animate={{ y: 0 }}
               exit={{ y: "-100%" }}
-              transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
             />
             <motion.div
               className="tour-bar is-bottom"
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
-              transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
             />
 
+            {/* top HUD — section name + counter */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="tour-hud pointer-events-none fixed inset-x-0 bottom-0 z-[66] flex h-[9vh] min-h-[54px] items-center justify-between gap-4 px-6"
+              transition={{ delay: 0.35 }}
+              className="tour-hud pointer-events-none fixed inset-x-0 top-0 z-[66] flex h-[9vh] min-h-[54px] items-center justify-between gap-4 px-6"
             >
-              <span className="font-mono text-[10px] uppercase tracking-[0.35em] text-white/45">
+              <span className="font-mono text-[10px] tracking-[0.35em] text-white/45 uppercase">
                 {exitLabel}
               </span>
 
               <div className="flex items-center gap-3">
-                <div className="h-px w-24 overflow-hidden bg-white/15 sm:w-48">
-                  <div
-                    className="h-full bg-gradient-to-r from-[var(--accent)] to-[var(--accent-2)]"
-                    style={{ width: `${Math.round(progress * 100)}%` }}
-                  />
-                </div>
-                <span
-                  className="min-w-24 text-end text-[13px] font-bold text-white"
-                  style={{ fontFamily: "var(--font-display)" }}
-                >
-                  {caption}
-                </span>
+                <AnimatePresence mode="wait">
+                  <motion.span
+                    key={caption}
+                    initial={{ opacity: 0, y: 8, filter: "blur(6px)" }}
+                    animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                    exit={{ opacity: 0, y: -8, filter: "blur(6px)" }}
+                    transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                    className="text-[15px] font-black tracking-tight text-white sm:text-lg"
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    {caption}
+                  </motion.span>
+                </AnimatePresence>
+                {step > 0 && (
+                  <span className="font-mono text-[10px] text-white/40">
+                    {step}/{total}
+                  </span>
+                )}
               </div>
             </motion.div>
 
-            <button
-              type="button"
-              onClick={() => (cancelled.current = true)}
-              className="fixed inset-0 z-[64] cursor-pointer"
-              aria-label={exitLabel}
-              tabIndex={-1}
-            />
+            {/* bottom HUD — step dots + skip */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ delay: 0.35 }}
+              className="tour-hud fixed inset-x-0 bottom-0 z-[67] flex h-[9vh] min-h-[54px] items-center justify-between gap-4 px-6"
+            >
+              <div className="flex items-center gap-1.5">
+                {sections.map((s, i) => (
+                  <span
+                    key={s.id}
+                    className={`h-1 rounded-full transition-all duration-500 ${
+                      i < step
+                        ? "w-6 bg-[var(--accent)]"
+                        : "w-2 bg-white/20"
+                    }`}
+                  />
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => (cancelled.current = true)}
+                className="rounded-full border border-white/15 px-4 py-1.5 text-[11px] font-semibold tracking-wide text-white/70 transition hover:border-white/40 hover:text-white"
+              >
+                {skipLabel}
+              </button>
+            </motion.div>
           </>
         )}
       </AnimatePresence>

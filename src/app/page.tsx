@@ -91,8 +91,9 @@ export default async function Home() {
         label={dict.tour.button}
         hint={dict.tour.hint}
         exitLabel={dict.tour.exit}
+        skipLabel={dict.tour.skip}
+        replayLabel={dict.tour.replay}
         sections={[
-          { id: "top", label: dict.nav.home },
           { id: "about", label: dict.nav.about },
           { id: "services", label: dict.nav.services },
           { id: "work", label: dict.nav.work },
