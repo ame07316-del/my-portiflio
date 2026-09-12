@@ -1,0 +1,53 @@
+{
+  "name": "my-portiflio",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "db:check": "node scripts/db.mjs check",
+    "db:push": "node scripts/db.mjs push",
+    "db:export": "node scripts/db.mjs export",
+    "db:import": "node scripts/db.mjs import",
+    "db:copy-local": "node scripts/db.mjs copy-local",
+    "db:serve-local": "node scripts/pglite-server.mjs",
+    "globe:dots": "node scripts/build-globe-dots.mjs"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.7.0",
+    "bcryptjs": "^3.0.3",
+    "clsx": "^2.1.1",
+    "jose": "^6.2.12",
+    "motion": "^13.2.0",
+    "next": "16.3.4",
+    "pg": "^8.23.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "three": "^0.185.1",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite-socket": "^0.2.11",
+    "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/d3-geo": "^3.1.1",
+    "@types/node": "^20",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/three": "^0.185.4",
+    "@types/topojson-client": "^3.1.5",
+    "d3-geo": "^3.1.1",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.4",
+    "tailwindcss": "^4",
+    "topojson-client": "^3.1.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5",
+    "world-atlas": "^2.0.2"
+  }
+}
