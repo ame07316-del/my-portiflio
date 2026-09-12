@@ -135,7 +135,7 @@ export default function Hero({
             style={{ fontFamily: "var(--font-display)" }}
           >
             <span className="block text-white/45 text-[0.32em] font-mono uppercase tracking-[0.5em] mb-4">
-              {heroLabel || "Portfolio 2025"}
+              {heroLabel || `Portfolio ${new Date().getFullYear()}`}
             </span>
             <span className="text-gradient">{name}</span>
           </motion.h1>

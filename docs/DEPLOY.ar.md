@@ -21,7 +21,8 @@ postgresql://postgres.xxxxxxxx:PASSWORD@aws-0-eu-central-1.pooler.supabase.com:6
 |---|---|---|
 | `DATABASE_URL` | رابط الـ Transaction pooler | **إجباري** |
 | `AUTH_SECRET` | نص عشوائي طويل | `openssl rand -base64 32` |
-| `ADMIN_EMAIL` | `ame07316@gmail.com` | إيميل أول دخول |
+| `ADMIN_TOKEN` | توكن قوي من اختيارك | **مفتاح الدخول الوحيد للوحة التحكم** — صفحة الدخول مش بتعرضه |
+| `ADMIN_EMAIL` | `ame07316@gmail.com` | بيانات حساب الأدمن (مش للدخول) |
 | `ADMIN_PASSWORD` | باسورد قوي | بيتعمل مرة واحدة عند أول تشغيل |
 | `DATABASE_POOL_MAX` | `1` | مهم جدًا على serverless |
 | `NEXT_PUBLIC_SITE_URL` | `https://your-app.vercel.app` | للـ SEO وصور المشاركة |

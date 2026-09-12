@@ -47,7 +47,18 @@ export default function WorldShift({
 
   useEffect(() => {
     const root = document.documentElement;
+    const timers = new Set<number>();
     let recheck = 0;
+
+    /** setTimeout that is tracked so unmount can cancel every pending flip. */
+    const later = (fn: () => void, ms: number) => {
+      const id = window.setTimeout(() => {
+        timers.delete(id);
+        fn();
+      }, ms);
+      timers.add(id);
+      return id;
+    };
 
     const flip = (to: "day" | "night") => {
       if (busy.current) return;
@@ -57,18 +68,18 @@ export default function WorldShift({
       setShift({ id, to });
 
       // the screen is fully covered by the flash at ~58% of the 1.7s timeline
-      window.setTimeout(() => {
+      later(() => {
         root.classList.toggle("day", to === "day");
         window.dispatchEvent(
           new CustomEvent("pf:world", { detail: { day: to === "day" } }),
         );
       }, 950);
 
-      window.setTimeout(() => {
+      later(() => {
         setShift(null);
         busy.current = false;
         // the viewport may have moved past another threshold meanwhile
-        recheck = window.setTimeout(measure, 60);
+        recheck = later(measure, 60);
       }, 1750);
     };
 
@@ -96,6 +107,8 @@ export default function WorldShift({
       window.removeEventListener("resize", onScroll);
       if (raf.current) cancelAnimationFrame(raf.current);
       window.clearTimeout(recheck);
+      for (const id of timers) window.clearTimeout(id);
+      timers.clear();
       root.classList.remove("day");
       root.style.removeProperty("--dayp");
     };

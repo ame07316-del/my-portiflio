@@ -49,15 +49,19 @@ npm run dev
 
 Open <http://localhost:3000> — and <http://localhost:3000/admin> for the dashboard.
 
-**Default admin login** (seeded on first run):
+**Sign-in is token-only** — one key opens the dashboard. Default token (seeded on
+first run):
 
 ```
-email:    admin@portfolio.dev
-password: admin1234
+amr-portfolio-2025
 ```
 
-> Change it right away from **Admin → Account**, or set `ADMIN_EMAIL` / `ADMIN_PASSWORD`
-> before the first run.
+> 🔐 Rotate it right away from **Admin → Access token**, or set `ADMIN_TOKEN` in
+> your environment before the first run. The login page never displays the token
+> (it's public), so keep it somewhere safe.
+>
+> `ADMIN_EMAIL` / `ADMIN_PASSWORD` still seed the `users` row shown on the
+> **Account** screen, but they are not used to sign in.
 
 ---
 
@@ -98,6 +102,16 @@ ADMIN_PASSWORD="something-strong"
 No terminal? **Admin → Database** shows the live connection, row counts, backup
 download, restore-from-file and a "run migrations" button.
 
+> ⚠️ **PGlite is single-process.** Stop `npm run dev` before running any `db:*`
+> command against the *local* database — two processes on `.data/pgdata` close the
+> dev server's connection (`⨯ Error: Connection closed`) and you have to restart
+> it. Production (a real Postgres) is unaffected.
+>
+> If the dev server was killed hard it can leave a stale lock behind and the site
+> falls back to the "Connect a database" screen: stop it, delete
+> `.data/pgdata/postmaster.pid` (or the whole `.data/pgdata` to reseed from
+> scratch) and start it again.
+
 📘 **Step-by-step Supabase guide (Arabic): [`docs/DATABASE.ar.md`](docs/DATABASE.ar.md)**
 
 ---
@@ -111,7 +125,8 @@ download, restore-from-file and a "run migrations" button.
 |---|---|
 | `DATABASE_URL` | Supabase **Transaction pooler** URI (port 6543) + `?sslmode=require` |
 | `AUTH_SECRET` | `openssl rand -base64 32` |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | your first admin login |
+| `ADMIN_TOKEN` | the key that opens `/admin` — **set your own**, never ship the default |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | seeded `users` row (Account screen) |
 | `DATABASE_POOL_MAX` | `1` on serverless |
 | `NEXT_PUBLIC_SITE_URL` | your final domain |
 

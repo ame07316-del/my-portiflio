@@ -78,7 +78,8 @@ aws-0-eu-central-1.pooler.supabase.com / postgres · SSL
 |---|---|
 | `DATABASE_URL` | رابط الـ **Transaction pooler** (بورت 6543) + `?sslmode=require` |
 | `AUTH_SECRET` | نص عشوائي طويل |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | بيانات أول دخول |
+| `ADMIN_TOKEN` | التوكن اللي بيفتح `/admin` — **غيّره**، متسيبش الافتراضي |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | بيانات حساب الأدمن (مش بتُستخدم في الدخول) |
 | `NEXT_PUBLIC_SITE_URL` | دومين الموقع |
 | `DATABASE_POOL_MAX` | `1` أو `2` (مهم على serverless) |
 
@@ -101,6 +102,11 @@ aws-0-eu-central-1.pooler.supabase.com / postgres · SSL
 ومن غير terminal خالص: **Admin → Database** فيه تحميل نسخة احتياطية، استرجاع ملف،
 وتشغيل الـ migrations بضغطة زرار.
 
+> ⚠️ **القاعدة المدمجة (PGlite) بتشتغل من عملية واحدة بس.** وقّف `npm run dev`
+> قبل ما تشغّل أي أمر `db:*` على القاعدة المحلية — لو عمليتين فتحوا `.data/pgdata`
+> في نفس الوقت، اتصال السيرفر هيقفل وهتلاقي `⨯ Error: Connection closed`،
+> والحل إنك تعمل restart لـ `npm run dev`. على الإنتاج (Postgres حقيقي) مفيش المشكلة دي.
+
 ---
 
 ## مشاكل شائعة
@@ -111,3 +117,5 @@ aws-0-eu-central-1.pooler.supabase.com / postgres · SSL
 | `password authentication failed` | الباسورد فيها رموز محتاجة URL-encode (`@` → `%40`) |
 | `self signed certificate` | تأكد إن `?sslmode=require` موجودة |
 | `too many connections` | نزّل `DATABASE_POOL_MAX` لـ `1` واستخدم Transaction pooler |
+| `Connection closed` في التطوير | أمر `db:*` اشتغل و`npm run dev` شغّال — اقفله وشغّل الأمر تاني وبعدين ارفع السيرفر |
+| صفحة "Connect a database" تظهر في التطوير | السيرفر اتقفل بقوة فساب قفل قديم — وقّف `npm run dev`، احذف `.data/pgdata/postmaster.pid` (أو `.data/pgdata` كلها لو عايز تعيد المحتوى المبدئي)، وشغّل تاني |

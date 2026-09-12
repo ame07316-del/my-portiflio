@@ -81,11 +81,14 @@ export default function LoginForm({ brandMark = "</>" }: { brandMark?: string })
           </SubmitButton>
         </div>
 
-        <p className="mt-6 rounded-xl border border-white/8 bg-white/[0.02] px-3.5 py-3 font-mono text-[11px] leading-5 text-white/35">
-          Default token: amr-portfolio-2025
-          <br />
-          Change it from Access after signing in.
-        </p>
+        {/* This page is public — never print the real access token here. */}
+        {process.env.NODE_ENV !== "production" && (
+          <p className="mt-6 rounded-xl border border-white/8 bg-white/[0.02] px-3.5 py-3 font-mono text-[11px] leading-5 text-white/35">
+            Local dev: your token is in the README / .env (ADMIN_TOKEN).
+            <br />
+            Rotate it from “Access token” after signing in.
+          </p>
+        )}
       </div>
     </motion.form>
   );

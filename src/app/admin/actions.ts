@@ -19,6 +19,21 @@ function refresh() {
   revalidatePath("/", "layout");
 }
 
+/**
+ * Number inputs arrive as strings, and an empty field is `""` — `Number("")` is
+ * 0, which silently turned cleared fields into zeros (a pin at lat/lng 0,0 lands
+ * in the ocean). Empty / invalid values fall back instead.
+ */
+function num(value: FormDataEntryValue | null, fallback: number): number {
+  const raw = String(value ?? "").trim();
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+const clamp = (n: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, n));
+
 /* --------------------------------- auth ---------------------------------- */
 
 export async function loginAction(
@@ -46,7 +61,7 @@ export async function saveToken(
   if (token.length < 6) return { error: "SHORT" };
   await setAdminToken(token);
   refresh();
-  revalidatePath("/admin/access");
+  revalidatePath("/admin/account");
   return { ok: true, message: token };
 }
 
@@ -87,10 +102,10 @@ function projectPayload(f: FormData) {
     admin_url: String(f.get("admin_url") ?? ""),
     repo_url: String(f.get("repo_url") ?? ""),
     category: String(f.get("category") ?? "web"),
-    year: Number(f.get("year") ?? new Date().getFullYear()) || 2025,
+    year: clamp(num(f.get("year"), new Date().getFullYear()), 1990, 2999),
     featured: f.get("featured") === "on",
     published: f.get("published") === "on",
-    sort: Number(f.get("sort") ?? 0) || 0,
+    sort: num(f.get("sort"), 0),
   };
 }
 
@@ -171,9 +186,9 @@ export async function saveSkill(_prev: FormState, f: FormData): Promise<FormStat
   const id = Number(f.get("id") ?? 0);
   const name = String(f.get("name") ?? "").trim();
   if (!name) return { error: "NAME_REQUIRED" };
-  const level = Math.max(0, Math.min(100, Number(f.get("level") ?? 80)));
+  const level = clamp(num(f.get("level"), 80), 0, 100);
   const category = String(f.get("category") ?? "frontend");
-  const sort = Number(f.get("sort") ?? 0);
+  const sort = num(f.get("sort"), 0);
   if (id) {
     await query(
       "UPDATE skills SET name=$1, level=$2, category=$3, sort=$4 WHERE id=$5",
@@ -206,7 +221,7 @@ export async function saveService(_prev: FormState, f: FormData): Promise<FormSt
     String(f.get("title_ar") ?? ""),
     String(f.get("desc_en") ?? ""),
     String(f.get("desc_ar") ?? ""),
-    Number(f.get("sort") ?? 0),
+    num(f.get("sort"), 0),
   ];
   if (!data[1] && !data[2]) return { error: "TITLE_REQUIRED" };
   if (id) {
@@ -246,7 +261,7 @@ export async function saveExperience(
     String(f.get("period") ?? ""),
     String(f.get("desc_en") ?? ""),
     String(f.get("desc_ar") ?? ""),
-    Number(f.get("sort") ?? 0),
+    num(f.get("sort"), 0),
   ];
   if (!data[0] && !data[1]) return { error: "ROLE_REQUIRED" };
   if (id) {
@@ -349,12 +364,13 @@ export async function saveLocation(
     label_en,
     String(f.get("label_ar") ?? ""),
     String(f.get("caption") ?? ""),
-    Number(f.get("lat") ?? 0),
-    Number(f.get("lng") ?? 0),
+    clamp(num(f.get("lat"), 0), -90, 90),
+    clamp(num(f.get("lng"), 0), -180, 180),
     String(f.get("avatar") ?? ""),
     f.get("is_home") === "on",
-    Number(f.get("sort") ?? 0),
+    num(f.get("sort"), 0),
   ];
+  let rowId = id;
   if (id) {
     await query(
       `UPDATE locations SET label_en=$1,label_ar=$2,caption=$3,lat=$4,lng=$5,
@@ -362,15 +378,17 @@ export async function saveLocation(
       [...data, id],
     );
   } else {
-    await query(
+    const rows = await query<{ id: number }>(
       `INSERT INTO locations (label_en,label_ar,caption,lat,lng,avatar,is_home,sort)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
       data,
     );
+    rowId = Number(rows[0]?.id ?? 0);
   }
-  // only one home base
-  if (data[6]) {
-    await query("UPDATE locations SET is_home = false WHERE label_en <> $1", [label_en]);
+  // Only one home base — clear the flag on every *other* row (by id, not by
+  // label: two pins can legitimately share a name).
+  if (data[6] && rowId) {
+    await query("UPDATE locations SET is_home = false WHERE id <> $1", [rowId]);
   }
   refresh();
   return { ok: true };

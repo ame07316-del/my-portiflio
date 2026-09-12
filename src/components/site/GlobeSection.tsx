@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Reveal } from "./Reveal";
 import type { GlobeMarker } from "@/components/ui/3d-globe";
 import type { Dict } from "@/lib/i18n";
+import { pinCaption } from "@/lib/i18n";
 import type { GlobeLocation, Lang, Settings } from "@/lib/types";
 import { pick } from "@/lib/types";
 
@@ -40,11 +41,11 @@ export default function GlobeSection({
         lat: Number(l.lat),
         lng: Number(l.lng),
         label: pick(l, "label", lang),
-        caption: l.caption,
+        caption: pinCaption(dict, l.caption, l.is_home),
         home: l.is_home,
         src: l.avatar || undefined,
       })),
-    [locations, lang],
+    [locations, lang, dict],
   );
 
   if (!locations.length) return null;

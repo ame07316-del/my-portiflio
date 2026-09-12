@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS projects (
   admin_url      TEXT NOT NULL DEFAULT '',
   repo_url       TEXT NOT NULL DEFAULT '',
   category       TEXT NOT NULL DEFAULT 'web',
-  year           INT NOT NULL DEFAULT 2025,
+  year           INT NOT NULL DEFAULT EXTRACT(year FROM now())::int,
   featured       BOOLEAN NOT NULL DEFAULT false,
   published      BOOLEAN NOT NULL DEFAULT true,
   sort           INT NOT NULL DEFAULT 0,
@@ -118,8 +118,8 @@ CREATE TABLE IF NOT EXISTS locations (
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS brand_mark     TEXT NOT NULL DEFAULT '</>';
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS logo_url       TEXT NOT NULL DEFAULT '';
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS avatar_url     TEXT NOT NULL DEFAULT '/avatar.png';
-ALTER TABLE settings ADD COLUMN IF NOT EXISTS hero_label_en  TEXT NOT NULL DEFAULT 'Portfolio 2025';
-ALTER TABLE settings ADD COLUMN IF NOT EXISTS hero_label_ar  TEXT NOT NULL DEFAULT 'أعمالي 2025';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS hero_label_en  TEXT NOT NULL DEFAULT ('Portfolio ' || EXTRACT(year FROM now())::int::text);
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS hero_label_ar  TEXT NOT NULL DEFAULT ('أعمالي ' || EXTRACT(year FROM now())::int::text);
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS meta_title_en  TEXT NOT NULL DEFAULT '';
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS meta_title_ar  TEXT NOT NULL DEFAULT '';
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS meta_desc_en   TEXT NOT NULL DEFAULT '';

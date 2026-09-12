@@ -11,8 +11,9 @@ export function ScrollProgress() {
   const x = useSpring(scrollYProgress, { stiffness: 120, damping: 24, mass: 0.3 });
   return (
     <motion.div
-      style={{ scaleX: x, transformOrigin: "0% 50%" }}
-      className="fixed inset-x-0 top-0 z-[70] h-[2px] bg-gradient-to-r from-[var(--accent)] via-white to-[var(--accent-2)]"
+      style={{ scaleX: x }}
+      // `scroll-progress` flips the transform origin in RTL (see globals.css)
+      className="scroll-progress fixed inset-x-0 top-0 z-[70] h-[2px] bg-gradient-to-r from-[var(--accent)] via-white to-[var(--accent-2)]"
     />
   );
 }

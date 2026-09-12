@@ -41,7 +41,7 @@
 :root {
   --accent: #22d3ee;
   --accent-2: #a855f7;
-  --font-display: "Space Grokel", "Clash Display", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Space Grotesk", "Clash Display", "Segoe UI", system-ui, sans-serif;
   --font-body: "Inter", "Cairo", "Segoe UI", system-ui, -apple-system, sans-serif;
   color-scheme: dark;
 }
@@ -65,6 +65,10 @@ body {
 }
 
 body.is-locked { overflow: hidden; }
+
+/* the scroll-progress bar must grow out of the leading edge in both directions */
+.scroll-progress { transform-origin: 0% 50%; }
+html[dir="rtl"] .scroll-progress { transform-origin: 100% 50%; }
 
 ::selection { background: color-mix(in oklab, var(--accent) 45%, transparent); color: #fff; }
 

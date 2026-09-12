@@ -46,6 +46,8 @@ export const dict = {
       label: "About me",
       title: "I turn ideas into products that ship",
       download: "Download CV",
+      open: "OPEN",
+      busy: "BUSY",
     },
     services: {
       label: "What I do",
@@ -57,10 +59,19 @@ export const dict = {
       title: "Projects I've built recently",
       subtitle: "Real, live products — visit them and try the dashboards.",
       all: "All",
+      featured: "Featured",
       live: "Live preview",
       admin: "Admin panel",
       code: "Source",
       view: "View project",
+      categories: {
+        web: "Web",
+        "web-app": "Web app",
+        website: "Website",
+        dashboard: "Dashboard",
+        design: "Design",
+        other: "Other",
+      },
     },
     skills: {
       label: "Capabilities",
@@ -87,6 +98,10 @@ export const dict = {
       base: "Home base",
       timezone: "Timezone friendly",
       hint: "drag to spin · hover a pin",
+      captions: {
+        home: "Home base",
+        client: "Client",
+      },
     },
     timeline: {
       label: "Journey",
@@ -168,6 +183,8 @@ export const dict = {
       label: "من أنا",
       title: "بحوّل الأفكار لمنتجات شغّالة فعلًا",
       download: "تحميل السيرة الذاتية",
+      open: "متاح",
+      busy: "مشغول",
     },
     services: {
       label: "بعمل إيه",
@@ -179,10 +196,19 @@ export const dict = {
       title: "مشاريع نفذتها مؤخرًا",
       subtitle: "منتجات حقيقية شغالة — ادخل جربها وجرب لوحات التحكم.",
       all: "الكل",
+      featured: "مميّز",
       live: "معاينة مباشرة",
       admin: "لوحة التحكم",
       code: "الكود",
       view: "عرض المشروع",
+      categories: {
+        web: "ويب",
+        "web-app": "تطبيق ويب",
+        website: "موقع",
+        dashboard: "لوحة تحكم",
+        design: "تصميم",
+        other: "أخرى",
+      },
     },
     skills: {
       label: "الإمكانيات",
@@ -209,6 +235,10 @@ export const dict = {
       base: "المقر",
       timezone: "أي توقيت",
       hint: "اسحب لتدوير الكوكب · مرّر على أي نقطة",
+      captions: {
+        home: "المقر",
+        client: "عميل",
+      },
     },
     timeline: {
       label: "الرحلة",
@@ -251,6 +281,37 @@ export type Dict = (typeof dict)["en"];
 
 export function getDict(lang: Lang): Dict {
   return (dict[lang] ?? dict.en) as Dict;
+}
+
+/** Normalises a free-text key so "Web app", "web-app" and "WEB-APP" all match. */
+function normalizeKey(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, "-");
+}
+
+function lookup(map: Record<string, string>, value: string): string | undefined {
+  const key = normalizeKey(value);
+  if (!key) return undefined;
+  if (map[key]) return map[key];
+  // "home-base" → "home", "web-app-x" → "web"
+  const head = key.split("-")[0];
+  return map[head];
+}
+
+/** Localised label for a project category (falls back to the raw value). */
+export function categoryLabel(dict: Dict, category: string): string {
+  return (
+    lookup(dict.work.categories as Record<string, string>, category) ??
+    category ??
+    ""
+  );
+}
+
+/** Localised caption for a globe pin (falls back to the raw value). */
+export function pinCaption(dict: Dict, caption: string, isHome: boolean): string {
+  if (isHome) return dict.globe.captions.home;
+  return (
+    lookup(dict.globe.captions as Record<string, string>, caption) ?? caption ?? ""
+  );
 }
 
 export const LANG_COOKIE = "pf_lang";

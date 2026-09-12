@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { motion } from "motion/react";
 import { Reveal, SectionHeading } from "./Reveal";
 import type { Dict } from "@/lib/i18n";
+import { categoryLabel } from "@/lib/i18n";
 import type { Experience, Lang, Project, Service, Settings, Skill } from "@/lib/types";
 import { pick } from "@/lib/types";
 
@@ -98,7 +99,7 @@ export function About({
                   {pick(settings, "location", lang)}
                 </span>
                 <span className="text-[10px] font-bold text-[var(--accent)]">
-                  {settings.available ? "OPEN" : "BUSY"}
+                  {settings.available ? dict.about.open : dict.about.busy}
                 </span>
               </div>
             </div>
@@ -177,7 +178,7 @@ export function Services({
                   {pick(s, "desc", lang)}
                 </p>
                 <span className="relative mt-5 block font-mono text-[10px] tracking-[0.3em] text-white/25">
-                  0{i + 1}
+                  {String(i + 1).padStart(2, "0")}
                 </span>
               </div>
             </Reveal>
@@ -239,11 +240,11 @@ function ProjectCard({
           <div className="absolute start-4 top-4 flex gap-2">
             {project.featured && (
               <span className="rounded-full bg-[var(--accent)] px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-ink">
-                Featured
+                {dict.work.featured}
               </span>
             )}
             <span className="rounded-full border border-white/15 bg-black/40 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-white/70 backdrop-blur">
-              {project.category}
+              {categoryLabel(dict, project.category)}
             </span>
           </div>
         </div>
@@ -349,7 +350,7 @@ export function Work({
                       : "border-white/10 bg-white/5 text-white/55 hover:text-white"
                   }`}
                 >
-                  {c === "all" ? dict.work.all : c}
+                  {c === "all" ? dict.work.all : categoryLabel(dict, c)}
                 </button>
               ))}
             </div>
@@ -489,7 +490,7 @@ export function Process({ dict }: { dict: Dict }) {
                   className="block text-5xl font-black text-white/8"
                   style={{ fontFamily: "var(--font-display)" }}
                 >
-                  0{i + 1}
+                  {String(i + 1).padStart(2, "0")}
                 </span>
                 <h3 className="mt-3 text-lg font-bold">{s.t}</h3>
                 <p className="mt-2 text-sm leading-6 text-white/50">{s.d}</p>
@@ -514,6 +515,7 @@ export function Footer({
   lang: Lang;
 }) {
   const year = new Date().getFullYear();
+  // an empty href renders a dead link that just reloads the page, so drop those
   const socials = [
     { href: settings.github, label: "GitHub" },
     { href: settings.linkedin, label: "LinkedIn" },
@@ -521,7 +523,7 @@ export function Footer({
     settings.whatsapp
       ? { href: `https://wa.me/${settings.whatsapp}`, label: "WhatsApp" }
       : null,
-  ].filter(Boolean) as { href: string; label: string }[];
+  ].filter((s): s is { href: string; label: string } => Boolean(s?.href.trim()));
 
   return (
     <footer className="relative border-t border-white/10 py-12">
