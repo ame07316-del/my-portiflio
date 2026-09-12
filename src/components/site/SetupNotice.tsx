@@ -1,3 +1,5 @@
+import { isProductionRuntime } from "@/lib/secret";
+
 /**
  * Shown instead of a crash when the app can't reach a database yet
  * (typically a fresh deploy without DATABASE_URL).
@@ -78,7 +80,8 @@ export default function SetupNotice({ message }: { message?: string }) {
           </a>
         </div>
 
-        {message && (
+        {/* Raw driver errors can leak hostnames/credentials — dev only. */}
+        {message && !isProductionRuntime() && (
           <p className="mt-8 overflow-x-auto rounded-xl border border-white/8 bg-black/40 px-4 py-3 font-mono text-[11px] leading-5 text-white/40">
             {message}
           </p>

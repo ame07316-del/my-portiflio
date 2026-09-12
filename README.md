@@ -49,16 +49,16 @@ npm run dev
 
 Open <http://localhost:3000> — and <http://localhost:3000/admin> for the dashboard.
 
-**Sign-in is token-only** — one key opens the dashboard. Default token (seeded on
-first run):
+**Sign-in is token-only** — one key opens the dashboard.
 
-```
-amr-portfolio-2025
-```
+- **Development** (no env set): the starter token is `amr-portfolio-2025`.
+- **Production**: that public default is *never* used. On the first request the
+  site mints a fresh random token, stores it, and prints it to the function
+  logs (Vercel → Deployments → ⋯ → Logs). Or set `ADMIN_TOKEN` yourself before
+  deploying — the env var always wins.
 
-> 🔐 Rotate it right away from **Admin → Access token**, or set `ADMIN_TOKEN` in
-> your environment before the first run. The login page never displays the token
-> (it's public), so keep it somewhere safe.
+> 🔐 Rotate any token at any time from **Admin → Access token**. The login page
+> never displays the token, so keep it somewhere safe.
 >
 > `ADMIN_EMAIL` / `ADMIN_PASSWORD` still seed the `users` row shown on the
 > **Account** screen, but they are not used to sign in.

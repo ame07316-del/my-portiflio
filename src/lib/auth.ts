@@ -1,30 +1,54 @@
+import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
 import { query, queryOne } from "@/lib/db";
+import { DEFAULT_ADMIN_TOKEN, isProductionRuntime } from "@/lib/secret";
 import type { User } from "@/lib/types";
 
 const COOKIE = "pf_session";
-const secret = new TextEncoder().encode(
-  process.env.AUTH_SECRET || "dev-only-secret-change-me-in-production-32chars",
-);
+const SESSION_MAX_AGE = 60 * 60 * 24; // 24h
+
+/**
+ * Resolve the JWT signing secret. Production refuses to run with the
+ * well-known dev fallback — a session cookie must be forgeable by nobody.
+ */
+function resolveSecret(): Uint8Array | null {
+  const env = process.env.AUTH_SECRET?.trim();
+  if (env && env.length >= 32) return new TextEncoder().encode(env);
+  if (!isProductionRuntime()) {
+    return new TextEncoder().encode(
+      "dev-only-secret-change-me-in-production-32chars",
+    );
+  }
+  console.error(
+    "[auth] AUTH_SECRET is missing or shorter than 32 chars — admin sessions are disabled.",
+  );
+  return null;
+}
 
 export type Session = { uid: number; email: string; name: string };
 
 export async function createSession(user: Session) {
+  const secret = resolveSecret();
+  if (!secret) {
+    throw new Error(
+      "AUTH_SECRET is not configured (need 32+ random chars) — add it to your environment and redeploy.",
+    );
+  }
   const token = await new SignJWT({ ...user })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("7d")
+    .setExpirationTime(`${SESSION_MAX_AGE}s`)
     .sign(secret);
 
   const store = await cookies();
   store.set(COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: isProductionRuntime(),
     path: "/",
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge: SESSION_MAX_AGE,
   });
 }
 
@@ -37,6 +61,8 @@ export async function getSession(): Promise<Session | null> {
   const store = await cookies();
   const token = store.get(COOKIE)?.value;
   if (!token) return null;
+  const secret = resolveSecret();
+  if (!secret) return null; // never trust a cookie signed by a known secret
   try {
     const { payload } = await jwtVerify(token, secret);
     return {
@@ -57,20 +83,25 @@ export async function requireSession(): Promise<Session> {
 
 /* ----------------------------- token access ----------------------------- */
 
-export const DEFAULT_ADMIN_TOKEN = "amr-portfolio-2025";
-
-/** The single key that opens the dashboard. Env wins over the database. */
-export async function getAdminToken(): Promise<string> {
+/**
+ * The single key that opens the dashboard. Env wins over the database.
+ * In production there is deliberately no public-default fallback: if no
+ * token is configured anywhere, sign-in is blocked until one is set.
+ * (Development keeps DEFAULT_ADMIN_TOKEN so `npm run dev` just works.)
+ */
+export async function getAdminToken(): Promise<string | null> {
   const fromEnv = process.env.ADMIN_TOKEN?.trim();
   if (fromEnv) return fromEnv;
   try {
     const row = await queryOne<{ admin_token: string }>(
       "SELECT admin_token FROM settings WHERE id = 1",
     );
-    return row?.admin_token?.trim() || DEFAULT_ADMIN_TOKEN;
+    const fromDb = row?.admin_token?.trim();
+    if (fromDb) return fromDb;
   } catch {
-    return DEFAULT_ADMIN_TOKEN;
+    /* database unreachable */
   }
+  return isProductionRuntime() ? null : DEFAULT_ADMIN_TOKEN;
 }
 
 /** Constant-time-ish comparison so the token can't be guessed by timing. */
@@ -83,7 +114,7 @@ function sameToken(a: string, b: string) {
 
 export async function verifyToken(token: string): Promise<Session | null> {
   const expected = await getAdminToken();
-  if (!token || !sameToken(token.trim(), expected)) return null;
+  if (!expected || !token || !sameToken(token.trim(), expected)) return null;
 
   const owner = await queryOne<{ name_en: string; email: string }>(
     "SELECT name_en, email FROM settings WHERE id = 1",
@@ -98,6 +129,11 @@ export async function verifyToken(token: string): Promise<Session | null> {
 
 export async function setAdminToken(token: string) {
   await query("UPDATE settings SET admin_token = $1 WHERE id = 1", [token.trim()]);
+}
+
+/** Strong random token (24 chars, URL-safe) — used by the production seed. */
+export function generateStrongToken(): string {
+  return randomBytes(18).toString("base64url");
 }
 
 export async function verifyCredentials(email: string, password: string) {

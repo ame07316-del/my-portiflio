@@ -70,7 +70,9 @@ export default function LoginForm({ brandMark = "</>" }: { brandMark?: string })
             <Alert tone="error">
               {state.error === "EMPTY"
                 ? "Enter your token first."
-                : "That token is not valid."}
+                : state.error === "RATE_LIMITED"
+                  ? "Too many attempts — wait a few minutes and try again."
+                  : "That token is not valid."}
             </Alert>
           </div>
         )}

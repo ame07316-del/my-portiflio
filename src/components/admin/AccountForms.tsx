@@ -26,11 +26,11 @@ export default function AccountForms({
   token,
 }: {
   user: { name: string; email: string };
-  token: string;
+  token: string | null;
 }) {
   const [accState, accAction] = useActionState(saveAccount, initial);
   const [tokState, tokAction] = useActionState(saveToken, initial);
-  const [value, setValue] = useState(token);
+  const [value, setValue] = useState(token ?? "");
   const [copied, setCopied] = useState("");
 
   const link =

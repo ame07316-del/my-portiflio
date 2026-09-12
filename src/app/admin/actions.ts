@@ -1,8 +1,10 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { exportData, importData, migrate, query } from "@/lib/db";
+import { checkRateLimit, clientIp } from "@/lib/ratelimit";
 import {
   createSession,
   destroySession,
@@ -44,6 +46,9 @@ export async function loginAction(
   const next = String(formData.get("next") ?? "/admin");
 
   if (!token.trim()) return { error: "EMPTY" };
+  // Brute-force throttle: 8 attempts / 15 min / IP.
+  const gate = checkRateLimit(`login:${clientIp(await headers())}`, 8, 15 * 60 * 1000);
+  if (!gate.ok) return { error: "RATE_LIMITED" };
   const session = await verifyToken(token);
   if (!session) return { error: "INVALID" };
 
@@ -415,7 +420,8 @@ export async function restoreBackup(
 ): Promise<FormState> {
   await requireSession();
   const file = f.get("backup");
-  if (!(file instanceof File) || file.size === 0) {
+  const MAX_BACKUP_BYTES = 5 * 1024 * 1024; // 5 MB is plenty for this site
+  if (!(file instanceof File) || file.size === 0 || file.size > MAX_BACKUP_BYTES) {
     return { error: "NO_FILE" };
   }
   try {
