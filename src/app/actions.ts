@@ -1,8 +1,9 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
+import { checkRateLimit, clientIp } from "@/lib/ratelimit";
 import { LANG_COOKIE } from "@/lib/i18n";
 
 export async function setLang(lang: "en" | "ar") {
@@ -27,6 +28,10 @@ export async function sendMessage(
   const budget = String(formData.get("budget") ?? "").trim();
   const body = String(formData.get("body") ?? "").trim();
   const honey = String(formData.get("company") ?? "");
+
+  // Spam throttle: 5 messages / 10 min / IP.
+  const gate = checkRateLimit(`contact:${clientIp(await headers())}`, 5, 10 * 60 * 1000);
+  if (!gate.ok) return { status: "error", message: "RATE_LIMITED" };
 
   if (honey) return { status: "ok" }; // bot trap
   if (!name || !email || !body || !/^\S+@\S+\.\S+$/.test(email)) {

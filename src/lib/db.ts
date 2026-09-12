@@ -7,9 +7,11 @@
  *             to WASM) is created under `.data/pgdata`, so the exact same SQL runs
  *             in development and in production.
  */
+import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import bcrypt from "bcryptjs";
+import { DEFAULT_ADMIN_TOKEN, isProductionRuntime } from "@/lib/secret";
 
 type Row = Record<string, unknown>;
 type Result<T> = { rows: T[] };
@@ -267,6 +269,26 @@ export async function seed(db: Driver) {
     ],
   );
 
+  // Production must never keep the publicly documented default token from
+  // schema.sql: mint a fresh random one on first run and print it to the
+  // function logs (visible under Vercel → Deployments → Logs).
+  if (isProductionRuntime() && !process.env.ADMIN_TOKEN?.trim()) {
+    const cur = await db.query<{ admin_token: string }>(
+      "SELECT admin_token FROM settings WHERE id = 1",
+    );
+    const current = cur.rows[0]?.admin_token?.trim() ?? "";
+    if (!current || current === DEFAULT_ADMIN_TOKEN) {
+      const fresh = randomBytes(18).toString("base64url");
+      await db.query("UPDATE settings SET admin_token = $1 WHERE id = 1", [
+        fresh,
+      ]);
+      console.warn(
+        `[security] Fresh admin token generated on first run: ${fresh}\n` +
+          "Store it somewhere safe (or set the ADMIN_TOKEN env var and redeploy).",
+      );
+    }
+  }
+
   const locations: Array<[string, string, string, number, number, boolean, number]> = [
     ["Cairo", "القاهرة", "Home base", 30.0444, 31.2357, true, 1],
     ["Dubai", "دبي", "Client", 25.2048, 55.2708, false, 2],
@@ -471,7 +493,18 @@ export const BACKUP_TABLES = [
 export async function exportData() {
   const data: Record<string, Row[]> = {};
   for (const table of BACKUP_TABLES) {
-    data[table] = await query<Row>(`SELECT * FROM ${table} ORDER BY id ASC`);
+    const rows = await query<Row>(`SELECT * FROM ${table} ORDER BY id ASC`);
+    if (table === "settings") {
+      // Never ship the admin token inside backup files — restoring one then
+      // simply leaves the current token untouched.
+      data[table] = rows.map((row) => {
+        const copy = { ...row };
+        delete copy.admin_token;
+        return copy;
+      });
+    } else {
+      data[table] = rows;
+    }
   }
   return {
     exportedAt: new Date().toISOString(),
@@ -480,6 +513,11 @@ export async function exportData() {
   };
 }
 
+/**
+ * Restore a backup file. Backup files are untrusted input and their column
+ * names are interpolated into SQL as identifiers — every column is therefore
+ * validated against the live schema BEFORE any row is written.
+ */
 export async function importData(payload: { data: Record<string, Row[]> }) {
   const driver = await getDriver();
   let inserted = 0;
@@ -488,10 +526,27 @@ export async function importData(payload: { data: Record<string, Row[]> }) {
     const rows = payload.data?.[table];
     if (!Array.isArray(rows)) continue;
 
+    const colRes = await driver.query<{ column_name: string }>(
+      "SELECT column_name FROM information_schema.columns " +
+        "WHERE table_schema = 'public' AND table_name = $1",
+      [table],
+    );
+    const allowed = new Set(colRes.rows.map((r) => r.column_name));
+    const cleanRows: Row[] = rows.map((row) => {
+      if (!row || typeof row !== "object" || Array.isArray(row)) {
+        throw new Error("bad row");
+      }
+      for (const key of Object.keys(row)) {
+        if (!allowed.has(key)) throw new Error(`unknown column: ${key}`);
+      }
+      return row;
+    });
+
     if (table === "settings") {
-      const row = rows[0];
+      const row = cleanRows[0];
       if (!row) continue;
       const cols = Object.keys(row).filter((c) => c !== "id" && c !== "updated_at");
+      if (!cols.length) continue;
       const sets = cols.map((c, i) => `${c} = $${i + 1}`).join(", ");
       await driver.query(`UPDATE settings SET ${sets} WHERE id = 1`, [
         ...cols.map((c) => normalize(row[c])),
@@ -501,7 +556,7 @@ export async function importData(payload: { data: Record<string, Row[]> }) {
     }
 
     await driver.query(`DELETE FROM ${table}`);
-    for (const row of rows) {
+    for (const row of cleanRows) {
       const cols = Object.keys(row).filter((c) => c !== "id");
       if (!cols.length) continue;
       const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
