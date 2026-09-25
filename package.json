@@ -13,7 +13,9 @@
     "db:import": "node scripts/db.mjs import",
     "db:copy-local": "node scripts/db.mjs copy-local",
     "db:serve-local": "node scripts/pglite-server.mjs",
-    "globe:dots": "node scripts/build-globe-dots.mjs"
+    "globe:dots": "node scripts/build-globe-dots.mjs",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run lint && npm run typecheck"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

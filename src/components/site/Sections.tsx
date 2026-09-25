@@ -86,7 +86,7 @@ export function About({
             <div className="absolute -inset-4 rounded-[2rem] bg-gradient-to-br from-[var(--accent)]/25 to-[var(--accent-2)]/25 blur-2xl" />
             <div className="relative overflow-hidden rounded-[1.6rem] border border-white/10">
               <Image
-                src={settings.avatar_url || "/avatar.png"}
+                src={settings.avatar_url || "/avatar.webp"}
                 alt={pick(settings, "name", lang)}
                 width={640}
                 height={640}
@@ -231,6 +231,9 @@ function ProjectCard({
               alt={pick(project, "title", lang)}
               fill
               sizes="(max-width: 768px) 100vw, 50vw"
+              // images pasted as absolute URLs (CDN, Unsplash, ...) bypass the
+              // local optimiser instead of throwing "hostname is not configured"
+              unoptimized={/^https?:/.test(project.image)}
               className="object-cover transition duration-700 group-hover:scale-[1.06]"
             />
           ) : (

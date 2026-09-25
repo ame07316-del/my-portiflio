@@ -28,7 +28,7 @@ export const DEFAULT_SETTINGS: Settings = {
   projects_done: 0,
   brand_mark: "</>",
   logo_url: "",
-  avatar_url: "/avatar.png",
+  avatar_url: "/avatar.webp",
   hero_label_en: `Portfolio ${new Date().getFullYear()}`,
   hero_label_ar: `أعمالي ${new Date().getFullYear()}`,
   meta_title_en: "",

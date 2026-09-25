@@ -134,3 +134,42 @@ ALTER TABLE settings ADD COLUMN IF NOT EXISTS globe_color    TEXT NOT NULL DEFAU
 
 -- Token based admin access (replaces email + password)
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS admin_token TEXT NOT NULL DEFAULT 'amr-portfolio-2025';
+
+-- ---------------------------------------------------------------------------
+-- Content migrations — repoint the AI placeholder art that shipped in early
+-- commits at the real project screenshots, and backfill links the first seed
+-- didn't carry. Every statement is guarded so anything edited from the admin
+-- dashboard (custom image, custom avatar) is left exactly as it is.
+-- ---------------------------------------------------------------------------
+UPDATE settings SET avatar_url = '/avatar.webp' WHERE avatar_url = '/avatar.png';
+
+UPDATE projects SET image = '/projects/restaurant.webp'
+ WHERE slug = 'interactive-restaurant-menu' AND image IN ('', '/projects/restaurant.png');
+UPDATE projects SET image = '/projects/gym.webp'
+ WHERE slug = 'gym-fitness-platform' AND image IN ('', '/projects/gym.png');
+UPDATE projects SET image = '/projects/estate.webp'
+ WHERE slug = 'estate-hub-pro' AND image IN ('', '/projects/estate.png');
+
+UPDATE projects SET repo_url = 'https://github.com/ame07316-del/Interactive-Restaurant-Menu'
+ WHERE slug = 'interactive-restaurant-menu' AND repo_url = '';
+UPDATE projects SET repo_url = 'https://github.com/ame07316-del/gym-fitness'
+ WHERE slug = 'gym-fitness-platform' AND repo_url = '';
+UPDATE projects SET repo_url = 'https://github.com/ame07316-del/EstateHub-Pro'
+ WHERE slug = 'estate-hub-pro' AND repo_url = '';
+UPDATE projects SET admin_url = 'https://gym-fitness-liard.vercel.app/admin/login'
+ WHERE slug = 'gym-fitness-platform'
+   AND admin_url = 'https://gym-fitness-liard.vercel.app/admin/login?next=%2Fadmin';
+UPDATE settings SET linkedin = '' WHERE linkedin = 'https://linkedin.com/';
+
+-- ---------------------------------------------------------------------------
+-- Shared throttle (serverless-safe)
+-- In-memory buckets only protect one function instance; this table makes the
+-- login / magic-link / contact budgets global. Rows self-expire on use, and a
+-- janitor statement cleans the leftovers.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS throttle (
+  key          TEXT PRIMARY KEY,
+  window_start TIMESTAMPTZ NOT NULL DEFAULT now(),
+  hits         INT NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS throttle_window_start_idx ON throttle (window_start);

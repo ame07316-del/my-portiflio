@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSession, verifyToken } from "@/lib/auth";
-import { checkRateLimit, clientIp } from "@/lib/ratelimit";
+import { checkRateLimitShared, clientIp } from "@/lib/ratelimit";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +54,11 @@ export async function GET(request: Request) {
   const next = url.searchParams.get("next") ?? "/admin";
 
   // Same brute-force budget as the login form: 8 / 15 min / IP.
-  const gate = checkRateLimit(`toklink:${clientIp(request.headers)}`, 8, 15 * 60 * 1000);
+  const gate = await checkRateLimitShared(
+    `toklink:${clientIp(request.headers)}`,
+    8,
+    15 * 60 * 1000,
+  );
   const session = gate.ok ? await verifyToken(token) : null;
   if (!session) {
     return NextResponse.redirect(new URL("/admin/login?e=1", origin));

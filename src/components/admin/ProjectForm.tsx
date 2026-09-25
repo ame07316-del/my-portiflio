@@ -72,7 +72,7 @@ export default function ProjectForm({ project }: { project?: Project }) {
             label="Cover image"
             name="image"
             defaultValue={p?.image}
-            placeholder="/projects/my-project.png"
+            placeholder="/projects/my-project.webp"
             hint="Put files in /public/projects or paste any image URL."
           />
         </div>

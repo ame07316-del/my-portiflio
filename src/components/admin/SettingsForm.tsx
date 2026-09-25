@@ -44,7 +44,7 @@ export default function SettingsForm({ settings }: { settings: Settings }) {
             label="Portrait / avatar"
             name="avatar_url"
             defaultValue={s.avatar_url}
-            placeholder="/avatar.png"
+            placeholder="/avatar.webp (أو /avatar.png)"
           />
           <Input
             label="Hero eyebrow (EN)"

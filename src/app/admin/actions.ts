@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { exportData, importData, migrate, query } from "@/lib/db";
-import { checkRateLimit, clientIp } from "@/lib/ratelimit";
+import { checkRateLimitShared, clearRateLimitShared, clientIp } from "@/lib/ratelimit";
 import {
   createSession,
   destroySession,
@@ -46,12 +46,16 @@ export async function loginAction(
   const next = String(formData.get("next") ?? "/admin");
 
   if (!token.trim()) return { error: "EMPTY" };
-  // Brute-force throttle: 8 attempts / 15 min / IP.
-  const gate = checkRateLimit(`login:${clientIp(await headers())}`, 8, 15 * 60 * 1000);
+  // Brute-force throttle: 8 attempts / 15 min / IP. Shared across serverless
+  // instances (see src/lib/ratelimit.ts), so a cold-start fleet can't be
+  // walked around with a fresh bucket per request.
+  const gateKey = `login:${clientIp(await headers())}`;
+  const gate = await checkRateLimitShared(gateKey, 8, 15 * 60 * 1000);
   if (!gate.ok) return { error: "RATE_LIMITED" };
   const session = await verifyToken(token);
   if (!session) return { error: "INVALID" };
 
+  await clearRateLimitShared(gateKey);
   await createSession(session);
   redirect(next.startsWith("/admin") ? next : "/admin");
 }
@@ -342,7 +346,7 @@ export async function saveSettings(
       s("accent2") || "#a855f7", f.get("available") === "on",
       Number(f.get("years") ?? 0), Number(f.get("clients") ?? 0),
       Number(f.get("projects_done") ?? 0),
-      s("brand_mark") || "</>", s("logo_url"), s("avatar_url") || "/avatar.png",
+      s("brand_mark") || "</>", s("logo_url"), s("avatar_url") || "/avatar.webp",
       s("hero_label_en"), s("hero_label_ar"),
       s("meta_title_en"), s("meta_title_ar"), s("meta_desc_en"), s("meta_desc_ar"),
       s("font_pair") || "grotesk",

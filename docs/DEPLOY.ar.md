@@ -26,6 +26,8 @@ postgresql://postgres.xxxxxxxx:PASSWORD@aws-0-eu-central-1.pooler.supabase.com:6
 | `ADMIN_PASSWORD` | باسورد قوي | بيتعمل مرة واحدة عند أول تشغيل |
 | `DATABASE_POOL_MAX` | `1` | مهم جدًا على serverless |
 | `NEXT_PUBLIC_SITE_URL` | `https://your-app.vercel.app` | للـ SEO وصور المشاركة |
+| `NOTIFY_WEBHOOK_URL` | رابط webhook (اختياري) | تنبيه فوري عند وصول رسالة جديدة |
+| `RESEND_API_KEY` + `RESEND_FROM` + `NOTIFY_EMAIL` | بيانات Resend (اختياري) | إرسال الرسالة على إيميلك |
 
 4. **Deploy**.
 
@@ -34,17 +36,28 @@ postgresql://postgres.xxxxxxxx:PASSWORD@aws-0-eu-central-1.pooler.supabase.com:6
 
 ## 3) الفرع (Branch)
 
-الشغل كله على فرع `arena/01a08136-my-portiflio`. عندك اختيارين:
+**Vercel بيرفع الفرع الأساسي (`main`) افتراضيًا.** فالأسهل إنك تفتح Pull Request من
+فرع الشغل وتعمله Merge على `main` — الـ CI هيشتغل أول ما ترفع (`.github/workflows/ci.yml`:
+lint + typecheck + build)، ولو أخضر ادمج والديبلوي هيتم تلقائيًا.
 
-- **الأسهل:** اعمل Merge للـ Pull Request على `main`، وVercel هيرفع `main`.
-- أو من **Settings → Git → Production Branch** غيّرها لـ `arena/01a08136-my-portiflio`.
+بديل وقت الشغل: من **Settings → Git → Production Branch** اختر فرعك الحالي،
+أو ارفع **Preview Deployment** من الـ Pull Request نفسه وتجرّبه قبل الدمج.
+
+> لو الديبلوي القديم بيرجع `404 DEPLOYMENT_NOT_FOUND` (زي `my-portiflio-delta.vercel.app`)
+> يبقى المشروع اتحذف أو اتوقف على Vercel — اعمل Import من جديد من
+> <https://vercel.com/new> بدل ما تحاول تعمل Redeploy لحاجة مش موجودة.
 
 ## 4) بعد أول ديبلوي
 
-1. افتح `https://your-app.vercel.app/admin` وسجّل دخول بالإيميل والباسورد اللي حطيتهم.
+1. افتح `https://your-app.vercel.app/admin` — الدخول **بالتوكن فقط** (`ADMIN_TOKEN`)،
+   مش بالإيميل والباسورد. لو ما حطّيتش `ADMIN_TOKEN`، الموقع بيولّد توكن عشوائي
+   ويطبعه في اللوجز: **Deployments → أول Request → Logs** (دوّر على
+   `Fresh admin token generated`).
 2. ادخل **Admin → Database** واتأكد إنها بتقول:
    `PostgreSQL — connected · SSL`
-3. غيّر الباسورد من **Admin → Account**.
+3. غيّر التوكن من **Admin → Access token** لو مشيت على التوكن اللي في اللوجز.
+4. املأ المحتوى الحقيقي من **Admin → Settings** (الاسم، الإيميل، LinkedIn/X،
+   صورة البروفايل) و**Admin → Projects** (الصور واللينكات).
 
 ## 5) لو عايز تنقل شغلك المحلي بدل المحتوى الافتراضي
 
