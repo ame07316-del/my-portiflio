@@ -235,6 +235,14 @@ export default function Preloader({
     if (document.readyState === "complete") loaded = true;
     else window.addEventListener("load", onLoad);
 
+    // `load` waits for every subresource — a blocked or slow Google-Fonts
+    // stylesheet (offline preview, privacy extension, flaky CDN) would pin the
+    // bar at 92% forever and strand the visitor behind the curtain. Let the
+    // intro finish on its own after a short grace period.
+    const grace = setTimeout(() => {
+      loaded = true;
+    }, 2500);
+
     const tick = () => {
       const ceiling = loaded ? 100 : 92;
       const speed = value < 60 ? 0.85 : value < 88 ? 0.42 : 0.22;
@@ -249,6 +257,7 @@ export default function Preloader({
     raf = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(raf);
+      clearTimeout(grace);
       window.removeEventListener("load", onLoad);
     };
   }, []);
@@ -269,6 +278,18 @@ export default function Preloader({
     return () => clearTimeout(t);
   }, [ready, finish]);
 
+  // Never let the intro hold the page hostage: skip it outright when the
+  // visitor asks for reduced motion, and force an exit if the progress bar
+  // ever stalls (blocked CDN, throttled tab, weak GPU).
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      finish();
+      return;
+    }
+    const watchdog = setTimeout(finish, 9000);
+    return () => clearTimeout(watchdog);
+  }, [finish]);
+
   const phaseIndex = Math.min(
     phases.length - 1,
     Math.floor((progress / 100) * phases.length),
@@ -281,7 +302,7 @@ export default function Preloader({
         <motion.div
           key="preloader"
           className="fixed inset-0 z-[100] cursor-pointer overflow-hidden bg-ink"
-          onClick={() => ready && finish()}
+          onClick={finish}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.5 }}
         >

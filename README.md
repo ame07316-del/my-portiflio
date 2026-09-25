@@ -90,6 +90,10 @@ ADMIN_PASSWORD="something-strong"
 
 ### Database CLI
 
+> The `throttle` table is internal — it holds the shared brute-force / spam
+> budgets (login, magic link, contact form) so they survive across serverless
+> instances. It is safe to truncate, never part of a backup.
+
 | Command | What it does |
 |---|---|
 | `npm run db:check` | test the connection, list tables and row counts |
@@ -185,8 +189,30 @@ The land dot-matrix is generated once from Natural Earth data:
 node scripts/build-globe-dots.mjs   # -> public/globe-dots.json
 ```
 
-## 🖼 Replacing the placeholder art
+## 🖼 Images & social card
 
-`public/projects/*.png` and `public/avatar.png` are AI-generated placeholders.
-Drop your own screenshots into `public/projects/` and point each project's
-**Cover image** field (Admin → Projects) at them, e.g. `/projects/my-shot.png`.
+`public/projects/*.webp` are real screenshots of the shipped projects
+(restaurant menu, gym platform, real-estate hub, dental clinic) and
+`public/avatar.webp` is the portrait — the whole `public/` folder is ~350 KB,
+so there is nothing left to compress.
+
+- Add a screenshot: drop the file in `public/projects/`, then put its path in
+  **Admin → Projects → Cover image** (e.g. `/projects/my-shot.webp`). Absolute
+  URLs (CDN, Unsplash, …) work too — they bypass the local optimiser instead of
+  throwing a `remotePatterns` error.
+- Social preview (WhatsApp / X / LinkedIn): `src/app/opengraph-image.tsx`
+  renders a 1200×630 card **from your Admin → Settings fields** (name, role,
+  tagline, accents, e-mail), so it can never go stale. `/sitemap.xml` and
+  `/robots.txt` are generated too.
+- The avatar is still a placeholder portrait — drop your own photo in
+  `public/avatar.webp` (or point **Admin → Settings → Portrait** at any URL).
+
+## ✅ Checking your work
+
+```bash
+npm run verify   # eslint + tsc --noEmit
+npm run build    # production build (uses the embedded DB, no env needed)
+```
+
+CI runs both on every push and Pull Request
+([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).

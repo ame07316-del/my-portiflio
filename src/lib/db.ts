@@ -263,7 +263,7 @@ export async function seed(db: Driver) {
       "Cairo, Egypt",
       "القاهرة، مصر",
       "https://github.com/ame07316-del",
-      "https://linkedin.com/",
+      "",
       "",
       "201288373753",
     ],
@@ -307,19 +307,39 @@ export async function seed(db: Driver) {
     );
   }
 
-  const projects: Array<[string, string, string, string, string, string, string, string[], string, string, string, string, number, boolean, number]> = [
+  const projects: Array<
+    [
+      slug: string,
+      title_en: string,
+      title_ar: string,
+      summary_en: string,
+      summary_ar: string,
+      description_en: string,
+      description_ar: string,
+      tags: string[],
+      image: string,
+      live_url: string,
+      admin_url: string,
+      repo_url: string,
+      category: string,
+      year: number,
+      featured: boolean,
+      sort: number,
+    ]
+  > = [
     [
       "interactive-restaurant-menu",
       "Interactive Restaurant Menu",
       "منيو مطعم تفاعلي",
       "A digital menu customers browse on their phone, plus a full admin dashboard for dishes, categories, prices and availability.",
       "منيو رقمي يتصفحه العميل من موبايله، مع لوحة تحكم كاملة للأصناف والأقسام والأسعار والتوفر.",
-      "A QR-first digital menu built for real restaurants. Guests browse rich dish cards with photos, allergens and prices in Arabic or English, while the owner manages everything from a protected dashboard: create categories, upload dishes, toggle availability in one tap, reorder the menu by drag, and track what's trending. Optimised for slow mobile connections and 100% responsive.",
-      "منيو رقمي يعمل بالـ QR ومصمم لمطاعم حقيقية. الزبون يتصفح كروت الأصناف بالصور والأسعار بالعربي أو الإنجليزي، وصاحب المطعم يدير كل حاجة من لوحة تحكم محمية: إضافة أقسام، رفع أصناف، إخفاء أو إظهار الصنف بضغطة، إعادة ترتيب المنيو، ومتابعة الأكثر طلبًا. متوافق تمامًا مع الموبايل.",
+      "A QR-first digital menu built for real restaurants. Guests browse rich dish cards with photos, allergens and prices in Arabic or English, while the owner manages everything from a protected dashboard: create categories, upload dishes, toggle availability in one tap, reorder the menu by drag, and track what's trending. Stock counts decrement on every order and low-stock alerts go out over a webhook. Supabase Postgres + Realtime keep every device in sync, and it stays 100% responsive on slow connections.",
+      "منيو رقمي يعمل بالـ QR ومصمم لمطاعم حقيقية. الزبون يتصفح كروت الأصناف بالصور والأسعار بالعربي أو الإنجليزي، وصاحب المطعم يدير كل حاجة من لوحة تحكم محمية: إضافة أقسام، رفع أصناف، إخفاء أو إظهار الصنف بضغطة، إعادة ترتيب المنيو، ومتابعة الأكثر طلبًا. الكمية بتنقص مع كل طلب، وتنبيهات نقص المخزون بتخرج عبر webhook. مزامنة لحظية بكل الأجهزة عن طريق Supabase Realtime، ومتوافق تمامًا مع الموبايل.",
       ["Next.js", "TypeScript", "Admin Dashboard", "Tailwind", "QR Menu"],
-      "/projects/restaurant.png",
+      "/projects/restaurant.webp",
       "https://interactive-restaurant-menu-one.vercel.app/",
       "https://interactive-restaurant-menu-one.vercel.app/admin",
+      "https://github.com/ame07316-del/Interactive-Restaurant-Menu",
       "web-app",
       2025,
       true,
@@ -331,12 +351,13 @@ export async function seed(db: Driver) {
       "منصة جيم ولياقة",
       "A high-energy gym website with class schedules, membership plans and a secure admin area for the staff.",
       "موقع جيم بتصميم قوي فيه جدول الحصص وباقات الاشتراك ولوحة إدارة محمية للفريق.",
-      "A conversion-focused website for a fitness brand: bold hero, trainer profiles, class timetable, membership pricing and lead capture. Behind a protected login, staff manage plans, schedules and content without touching code. Built with authentication, protected routes and a redirect-aware login flow.",
-      "موقع مصمم لتحويل الزائر لعميل: هيرو قوي، صفحات المدربين، جدول الحصص، باقات الاشتراك، ونموذج تسجيل اهتمام. ووراء تسجيل دخول محمي، الفريق يقدر يدير الباقات والجداول والمحتوى من غير ما يلمس الكود. مبني بنظام صلاحيات ومسارات محمية.",
+      "A conversion-focused website for a fitness brand: bold hero, trainer profiles, class timetable, membership pricing and lead capture. Members pick a plan, apply add-ons and watch the price update live with VAT included; staff manage plans, schedules and content behind a protected login. Ships with a Drizzle/Postgres data layer that silently falls back to an in-memory store for zero-config demos, plus a vitest suite for the pricing and auth rules.",
+      "موقع مصمم لتحويل الزائر لعميل: هيرو قوي، صفحات المدربين، جدول الحصص، باقات الاشتراك، ونموذج تسجيل اهتمام. العضو يختار الباقة والإضافات ويشوف السعر يتحدث لحظيًا مع ضريبة القيمة المضافة؛ والفريق يدير الباقات والجداول والمحتوى ورا تسجيل دخول محمي. مبني بطبقة بيانات Drizzle + Postgres مع ارتداد تلقائي لمخزن في الذاكرة عشان العرض من غير إعداد، واختبارات vitest لقواعد التسعير والصلاحيات.",
       ["Next.js", "Auth", "Protected Routes", "Dashboard", "Responsive"],
-      "/projects/gym.png",
+      "/projects/gym.webp",
       "https://gym-fitness-liard.vercel.app/",
-      "https://gym-fitness-liard.vercel.app/admin/login?next=%2Fadmin",
+      "https://gym-fitness-liard.vercel.app/admin/login",
+      "https://github.com/ame07316-del/gym-fitness",
       "website",
       2025,
       true,
@@ -348,26 +369,45 @@ export async function seed(db: Driver) {
       "منصة العقارات",
       "A property listing hub with rich search, filtering and detailed property pages.",
       "منصة عقارات فيها بحث متقدم وفلاتر وصفحات تفاصيل غنية للوحدات.",
-      "A real-estate platform where visitors search properties by location, price and type, compare listings, and open detailed pages with galleries and agent contact. Data-driven listings, fast filtering and a layout that scales from a handful of units to thousands.",
-      "منصة عقارية يقدر الزائر يبحث فيها بالموقع والسعر والنوع، يقارن الوحدات، ويفتح صفحة تفاصيل فيها معرض صور وبيانات التواصل. فلترة سريعة وتصميم يستحمل من عشرات لآلاف الوحدات.",
+      "A real-estate platform where visitors search properties by location, price and type, compare listings, and open detailed pages with galleries and agent contact. A mortgage calculator estimates the monthly instalment before a viewing is requested, and the request itself lands in WhatsApp. Data-driven listings, fast filtering and a layout that scales from a handful of units to thousands.",
+      "منصة عقارية يقدر الزائر يبحث فيها بالموقع والسعر والنوع، يقارن الوحدات، ويفتح صفحة تفاصيل فيها معرض صور وبيانات التواصل. حاسبة تمويل عقاري بتقدّر القسط الشهري قبل طلب المعاينة، والطلب نفسه يوصل على واتساب. فلترة سريعة وتصميم يستحمل من عشرات لآلاف الوحدات.",
       ["Next.js", "Search & Filters", "UI/UX", "Listings", "SEO"],
-      "/projects/estate.png",
+      "/projects/estate.webp",
       "https://estate-hub-pro.vercel.app/",
       "",
+      "https://github.com/ame07316-del/EstateHub-Pro",
       "web-app",
       2025,
       true,
       3,
+    ],
+    [
+      "nova-dental-studio",
+      "NOVA Dental Studio",
+      "عيادة نوفا لطب الأسنان",
+      "A calm, trustworthy clinic site with an appointment flow, patient pages and a secretary dashboard on Supabase.",
+      "موقع عيادة هادي وموثوق فيه حجز مواعيد، صفحات للمرضى، ولوحة سكرتارية مبنية على Supabase.",
+      "A full clinic front-end: service catalogue, gallery, pricing and an appointment booking flow backed by Supabase auth + Postgres. Roles are split between patient, secretary and dentist dashboards, and every form validates on the server before a single row is written. Styled from a written design system (NOVA-Design-System.md) so colours, radii and type stay consistent across screens.",
+      "واجهة عيادة كاملة: كتالوج خدمات، معرض صور، أسعار، ومسار حجز مواعيد مربوط بـ Supabase auth + Postgres. الأدوار متقسمة بين مريض وسكرتير وطبيب، وكل الفورم بتتتحقق على السيرفر قبل ما أي سطر يتكتب. التصميم كله ماشي ورا design system مكتوبة (NOVA-Design-System.md) عشان الألوان والحواف والخطات تفضل ثابتة في كل الصفحات.",
+      ["Next.js", "Supabase", "Roles & Auth", "Booking", "Design System"],
+      "/projects/dental.webp",
+      "",
+      "",
+      "https://github.com/ame07316-del/nova-dental",
+      "web-app",
+      2026,
+      false,
+      4,
     ],
   ];
 
   for (const p of projects) {
     await db.query(
       `INSERT INTO projects (slug, title_en, title_ar, summary_en, summary_ar, description_en, description_ar,
-         tags, image, live_url, admin_url, category, year, featured, sort)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13,$14,$15)
+         tags, image, live_url, admin_url, repo_url, category, year, featured, sort)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13,$14,$15,$16)
        ON CONFLICT (slug) DO NOTHING`,
-      [p[0], p[1], p[2], p[3], p[4], p[5], p[6], JSON.stringify(p[7]), p[8], p[9], p[10], p[11], p[12], p[13], p[14]],
+      [p[0], p[1], p[2], p[3], p[4], p[5], p[6], JSON.stringify(p[7]), p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15]],
     );
   }
 

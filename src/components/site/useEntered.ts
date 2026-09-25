@@ -8,7 +8,10 @@ export function useEntered() {
   useEffect(() => {
     const done = () => setEntered(true);
     window.addEventListener("pf:entered", done);
-    const t = setTimeout(done, 9000); // safety net
+    // Safety net: if the preloader never signals (no WebGL, blocked canvas, a
+    // crash inside <Canvas>), the hero must still appear. Revealing it early is
+    // harmless — the preloader overlay sits above it at z-100.
+    const t = setTimeout(done, 2500);
     return () => {
       window.removeEventListener("pf:entered", done);
       clearTimeout(t);
