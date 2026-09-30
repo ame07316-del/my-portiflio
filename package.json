@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:diagnose": "tsx scripts/test-diagnose.ts",
     "db:check": "node scripts/db.mjs check",
     "db:push": "node scripts/db.mjs push",
     "db:export": "node scripts/db.mjs export",
