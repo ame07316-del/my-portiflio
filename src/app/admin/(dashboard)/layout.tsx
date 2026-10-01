@@ -17,7 +17,7 @@ export default async function DashboardLayout({
   try {
     stats = await getStats();
   } catch (error) {
-    return <SetupNotice message={(error as Error)?.message} />;
+    return <SetupNotice error={error} />;
   }
 
   return (

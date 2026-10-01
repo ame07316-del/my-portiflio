@@ -48,7 +48,7 @@ export default async function Home() {
       ]);
     data = { settings, projects, skills, services, experiences, locations };
   } catch (error) {
-    return <SetupNotice message={(error as Error)?.message} />;
+    return <SetupNotice error={error} />;
   }
 
   const { settings, projects, skills, services, experiences, locations } = data;
