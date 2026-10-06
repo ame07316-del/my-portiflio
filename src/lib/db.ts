@@ -11,15 +11,10 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import bcrypt from "bcryptjs";
+import { initializeDatabase, postgresTransaction, type Driver, type ManagedDriver } from "@/lib/db-bootstrap";
 import { DEFAULT_ADMIN_TOKEN, isProductionRuntime } from "@/lib/secret";
 
 type Row = Record<string, unknown>;
-type Result<T> = { rows: T[] };
-
-interface Driver {
-  query<T = Row>(text: string, params?: unknown[]): Promise<Result<T>>;
-  exec(text: string): Promise<void>;
-}
 
 export type DbInfo = {
   driver: "postgres" | "pglite";
@@ -71,7 +66,7 @@ export class MissingDatabaseUrlError extends Error {
   }
 }
 
-async function createDriver(): Promise<Driver> {
+async function createDriver(): Promise<ManagedDriver> {
   const url = process.env.DATABASE_URL?.trim();
 
   // Serverless platforms cannot host the embedded database.
@@ -97,10 +92,14 @@ async function createDriver(): Promise<Driver> {
       console.error("[db] idle client error:", err.message);
     });
 
-    const version = await pool
-      .query("SELECT version()")
-      .then((r) => String(r.rows[0]?.version ?? "").split(",")[0])
-      .catch(() => "PostgreSQL");
+    let version: string;
+    try {
+      const result = await pool.query("SELECT version()");
+      version = String(result.rows[0]?.version ?? "").split(",")[0];
+    } catch (error) {
+      await pool.end().catch(() => undefined);
+      throw error;
+    }
 
     globalForDb.__pf_db_info = {
       driver: "postgres",
@@ -112,6 +111,8 @@ async function createDriver(): Promise<Driver> {
     console.log(`[db] connected to ${cfg.host}/${cfg.database} (${version})`);
 
     return {
+      transaction: (work) => postgresTransaction(pool, work),
+      close: () => pool.end(),
       async query<T>(text: string, params: unknown[] = []) {
         const res = await pool.query(text, params as never[]);
         return { rows: res.rows as T[] };
@@ -134,6 +135,14 @@ async function createDriver(): Promise<Driver> {
     ssl: false,
   };
   return {
+    close: () => lite.close(),
+    transaction: (work) => lite.transaction(async (tx) => work({
+      async query<T>(text: string, params: unknown[] = []) {
+        const res = await tx.query<T>(text, params);
+        return { rows: res.rows };
+      },
+      async exec(text: string) { await tx.exec(text); },
+    })),
     async query<T>(text: string, params: unknown[] = []) {
       const res = await lite.query(text, params as unknown[]);
       return { rows: (res.rows ?? []) as T[] };
@@ -144,32 +153,9 @@ async function createDriver(): Promise<Driver> {
   };
 }
 
-const BOOTSTRAP_LOCK = 918_273_645;
-
 async function bootstrap(): Promise<Driver> {
   const driver = await createDriver();
-
-  // Two cold starts can hit an empty database at the same time; an advisory
-  // lock makes migrate + seed run exactly once.
-  let locked = false;
-  try {
-    await driver.query("SELECT pg_advisory_lock($1)", [BOOTSTRAP_LOCK]);
-    locked = true;
-  } catch {
-    /* advisory locks unavailable — continue anyway */
-  }
-
-  try {
-    await migrate(driver);
-    await seed(driver);
-  } finally {
-    if (locked) {
-      await driver
-        .query("SELECT pg_advisory_unlock($1)", [BOOTSTRAP_LOCK])
-        .catch(() => undefined);
-    }
-  }
-
+  await initializeDatabase(driver, Boolean(process.env.DATABASE_URL?.trim()), migrate, seed);
   return driver;
 }
 
@@ -184,6 +170,7 @@ function getDriver(): Promise<Driver> {
     globalForDb.__pf_db = bootstrap().catch((err) => {
       // let the next request retry instead of caching a dead connection
       globalForDb.__pf_db = undefined;
+      globalForDb.__pf_db_info = undefined;
       throw err;
     });
   }
@@ -234,15 +221,17 @@ export async function seed(db: Driver) {
   const { rows } = await db.query<{ count: string }>(
     "SELECT count(*)::text AS count FROM users",
   );
-  if (Number(rows[0]?.count ?? 0) > 0) return false;
+  const hasUsers = Number(rows[0]?.count ?? 0) > 0;
 
-  const email = process.env.ADMIN_EMAIL || "admin@portfolio.dev";
-  const password = process.env.ADMIN_PASSWORD || "admin1234";
-  const hash = await bcrypt.hash(password, 10);
-  await db.query(
-    "INSERT INTO users (email, password_hash, name) VALUES ($1,$2,$3) ON CONFLICT (email) DO NOTHING",
-    [email.toLowerCase(), hash, "Amr"],
-  );
+  if (!hasUsers) {
+    const email = process.env.ADMIN_EMAIL || "admin@portfolio.dev";
+    const password = process.env.ADMIN_PASSWORD || "admin1234";
+    const hash = await bcrypt.hash(password, 10);
+    await db.query(
+      "INSERT INTO users (email, password_hash, name) VALUES ($1,$2,$3) ON CONFLICT (email) DO NOTHING",
+      [email.toLowerCase(), hash, "Amr"],
+    );
+  }
 
   await db.query(
     `INSERT INTO settings (id, name_en, name_ar, role_en, role_ar, tagline_en, tagline_ar,
@@ -288,6 +277,9 @@ export async function seed(db: Driver) {
       );
     }
   }
+
+  // Existing content must not be reseeded, even if the owner emptied a table.
+  if (hasUsers) return false;
 
   const locations: Array<[string, string, string, number, number, boolean, number]> = [
     ["Cairo", "القاهرة", "Home base", 30.0444, 31.2357, true, 1],
