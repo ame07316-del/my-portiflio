@@ -3,13 +3,16 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Security headers for every route (public site + admin dashboard).
   async headers() {
+    const sandboxPreview = process.env.NODE_ENV === "development" && process.env.ARENA_PREVIEW === "1";
     return [
       {
         source: "/:path*",
         headers: [
           // Block clickjacking / framing of the whole app.
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+          ...(sandboxPreview ? [] : [
+            { key: "X-Frame-Options", value: "DENY" },
+            { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+          ]),
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           {
@@ -22,6 +25,10 @@ const nextConfig: NextConfig = {
   },
   // Keep the embedded Postgres (WASM) and pg out of the server bundle.
   serverExternalPackages: ["@electric-sql/pglite", "pg"],
+  // schema.sql is read at runtime, including on serverless cold starts.
+  outputFileTracingIncludes: {
+    "/*": ["./src/lib/schema.sql"],
+  },
   // The embedded dev database must never be traced into serverless bundles.
   outputFileTracingExcludes: {
     "*": ["node_modules/@electric-sql/pglite/**"],
