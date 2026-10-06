@@ -7,9 +7,10 @@
  *  - NEVER expose secrets: passwords, the full connection string, usernames
  *    or raw hostnames are stripped before anything reaches the UI.
  *
- * This module is intentionally dependency-free so it can be unit-tested
- * in isolation (see scripts/test-diagnose.ts).
+ * This module uses only Node built-ins and can be unit-tested in isolation
+ * (see scripts/test-diagnose.ts).
  */
+import { isIP } from "node:net";
 
 export type DbIssueCode =
   | "missing-url"
@@ -21,6 +22,8 @@ export type DbIssueCode =
   | "connection-refused"
   | "timeout"
   | "ssl"
+  | "tls-certificate"
+  | "ssl-config"
   | "connection-reset"
   | "project-paused"
   | "too-many-connections"
@@ -46,6 +49,29 @@ export type DbDiagnosis = {
 /* ------------------------------------------------------------------ */
 
 const MAX_DETAIL = 240;
+const IPV6_TOKEN_PATTERN = /\[?[a-f0-9:]{2,}(?:%[a-z0-9_.-]+)?\]?/gi;
+
+function isIpv6Token(token: string) {
+  const address = token.startsWith("[") && token.endsWith("]")
+    ? token.slice(1, -1)
+    : token;
+  return isIP(address.split("%")[0]) === 6;
+}
+
+function maskIpv6Hosts(input: string): string {
+  return input.replace(new RegExp(IPV6_TOKEN_PATTERN.source, "gi"), (token) =>
+    isIpv6Token(token) ? "[host]" : token,
+  );
+}
+
+function hasIpv6Host(input: string): boolean {
+  let found = false;
+  input.replace(new RegExp(IPV6_TOKEN_PATTERN.source, "gi"), (token) => {
+    if (isIpv6Token(token)) found = true;
+    return token;
+  });
+  return found;
+}
 
 /**
  * Removes credentials, connection strings, usernames and raw hosts from a
@@ -57,24 +83,48 @@ const MAX_DETAIL = 240;
 export function sanitizeDbMessage(input: unknown): string {
   let s = typeof input === "string" ? input : String(input ?? "");
 
+  // Hide PEM blocks before normalizing whitespace. This covers certificates,
+  // private/public keys and PEM text containing either literal or real newlines.
+  s = s.replace(
+    /-----BEGIN ([A-Z0-9 ]*(?:CERTIFICATE|PRIVATE KEY|PUBLIC KEY))-----[\s\S]*?-----END \1-----/gi,
+    "[certificate data]",
+  );
+
   // Full connection strings: postgresql://user:pass@host:port/db?params
   s = s.replace(/\b(?:postgres|postgresql|postgresqls?):\/\/\S+/gi, "[connection-url]");
 
-  // Bare userinfo blocks that may appear outside a recognised scheme.
+  // Bare userinfo blocks and common key/value forms.
   s = s.replace(/\b[\w.-]+:[^\s@"']+@/g, "[credentials]@");
+  s = s.replace(/\b(password|passwd|pwd)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, "$1=[redacted]");
+  s = s.replace(/\b(username|user|role)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, "$1=…");
 
-  // "password authentication failed for user "x"" / "role "x" does not exist"
+  // "password authentication failed for user \"x\"" / "role \"x\" does not exist"
   s = s.replace(/\b(for user|user|role)\s+"[^"]*"/gi, '$1 "…"');
   s = s.replace(/\b(for user|user|role)\s+'[^']*'/gi, "$1 '…'");
 
-  // IPv4 addresses (may reveal infra) — the ":port" after them stays visible.
-  s = s.replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g, "[host]");
-
-  // Hostnames (Supabase/anything) — keep only a masked shape like *.supabase.com.
+  // Absolute paths can expose deployment layout or certificate locations.
   s = s.replace(
-    /\b(?:[a-z0-9-]+\.)+(?:com|net|org|io|co|in|dev|app|tech|cloud)\b/gi,
-    (m) => `*.${m.split(".").slice(-2).join(".")}`,
+    /(\b(?:open|read|load|file|path|at)\s+)["']?(?:[a-z]:\\|\/|~\/|\.{1,2}[\\/]|[a-z0-9_.-]+[\\/]|[a-z0-9_.-]+\.(?:pem|crt|cer|key|p12|pfx|conf|cnf)\b)[^"'\s,;)]*["']?/gi,
+    "$1[path]",
   );
+  s = s.replace(
+    /(^|[\s=:'"])(?:[a-z]:\\(?:[^\\\s]+\\)*[^\\\s,;)]*|\/(?:[^/\s]+\/)*[^/\s,;)]*)/gi,
+    "$1[path]",
+  );
+
+  // IP addresses (may reveal infra) — a following port stays visible.
+  s = s.replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g, "[host]");
+  s = maskIpv6Hosts(s);
+
+  // Hostnames (including private/non-standard suffixes) — preserve only the
+  // generic TLD, except for Supabase's public suffixes used in safe hints.
+  s = s.replace(/\b(?:[a-z0-9-]+\.)+[a-z0-9-]+\b/gi, (m) => {
+    const hostname = m.toLowerCase();
+    const safeSuffix = ["supabase.co", "supabase.com"].find((suffix) =>
+      hostname.endsWith(`.${suffix}`),
+    );
+    return `*.${safeSuffix ?? hostname.split(".").at(-1)}`;
+  });
 
   // Strip anything left that smells like a query string with params.
   s = s.replace(/\?\S*sslmode=\S*/gi, "?…");
@@ -83,13 +133,16 @@ export function sanitizeDbMessage(input: unknown): string {
   if (s.length > MAX_DETAIL) s = `${s.slice(0, MAX_DETAIL - 1)}…`;
   return s;
 }
-
 /** True when the (already sanitized) text still contains something leaky. */
 export function looksLeaky(text: string): boolean {
   return (
     /postgres(ql)?:\/\//i.test(text) ||
     /\b[\w.-]+:[^\s@"']+@/.test(text) ||
-    /\b\d{1,3}(?:\.\d{1,3}){3}\b/.test(text)
+    /\b\d{1,3}(?:\.\d{1,3}){3}\b/.test(text) ||
+    hasIpv6Host(text) ||
+    /(?<!\*\.)\b(?:[a-z0-9-]+\.)+[a-z0-9-]+\b/i.test(text) ||
+    /-----BEGIN [A-Z0-9 ]*(?:CERTIFICATE|PRIVATE KEY|PUBLIC KEY)-----/i.test(text) ||
+    /\b(?:open|read|load|file|path|at)\s+["']?(?:[a-z]:\\|\/|~\/|\.{1,2}[\\/]|[a-z0-9_.-]+[\\/]|[a-z0-9_.-]+\.(?:pem|crt|cer|key|p12|pfx|conf|cnf)\b)/i.test(text)
   );
 }
 
@@ -102,7 +155,6 @@ type UrlShape = {
   isSupabase: boolean;
   isPoolerHost: boolean;
   userHasProjectRef: boolean;
-  sslmode: string | null;
   isLocal: boolean;
 };
 
@@ -120,17 +172,36 @@ function readUrlShape(raw: string | undefined): UrlShape | null {
       isSupabase,
       isPoolerHost,
       userHasProjectRef: u.username.includes("."),
-      sslmode: u.searchParams.get("sslmode"),
-      isLocal: host === "localhost" || host === "127.0.0.1",
+      isLocal: host === "localhost" || host === "127.0.0.1" || host === "[::1]",
     };
   } catch {
-    return { port: null, isSupabase: false, isPoolerHost: false, userHasProjectRef: false, sslmode: null, isLocal: false };
+    return { port: null, isSupabase: false, isPoolerHost: false, userHasProjectRef: false, isLocal: false };
   }
 }
 
 /* ------------------------------------------------------------------ */
 /*  Classification                                                     */
 /* ------------------------------------------------------------------ */
+
+const TLS_CERTIFICATE_CODES = new Set([
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+  "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+  "CERT_HAS_EXPIRED",
+  "ERR_TLS_CERT_ALTNAME_INVALID",
+]);
+const SAFE_SYSTEM_CODES = new Set([
+  "ERR_INVALID_URL",
+  "DATABASE_SSL_CONFIG",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "ECONNRESET",
+  "EPIPE",
+  ...TLS_CERTIFICATE_CODES,
+]);
 
 type Rule = {
   code: DbIssueCode;
@@ -148,6 +219,13 @@ const RULES: Rule[] = [
   {
     code: "malformed-url",
     test: ({ message, sysCode }) => sysCode === "ERR_INVALID_URL" || /Invalid URL/i.test(message),
+  },
+  {
+    code: "ssl-config",
+    test: ({ name, message, sysCode }) =>
+      name === "PostgresConnectionConfigError" ||
+      sysCode === "DATABASE_SSL_CONFIG" ||
+      /DATABASE_SSL_CA|NODE_TLS_REJECT_UNAUTHORIZED|sslmode=no-verify|certificate-file options|explicitly disables SSL/i.test(message),
   },
   { code: "project-paused", test: ({ message }) => /\b(paused|is paused|suspend(?:ed)?)\b/i.test(message) },
   { code: "wrong-password", test: ({ pgCode }) => pgCode === "28P01" },
@@ -176,10 +254,20 @@ const RULES: Rule[] = [
       /Connection terminated unexpectedly due to timeout/i.test(message),
   },
   {
+    code: "tls-certificate",
+    test: ({ sysCode, message }) =>
+      TLS_CERTIFICATE_CODES.has(sysCode.toUpperCase()) ||
+      /\b(?:SELF_SIGNED_CERT_IN_CHAIN|DEPTH_ZERO_SELF_SIGNED_CERT|UNABLE_TO_VERIFY_LEAF_SIGNATURE|UNABLE_TO_GET_ISSUER_CERT_LOCALLY|CERT_HAS_EXPIRED|ERR_TLS_CERT_ALTNAME_INVALID)\b/i.test(message) ||
+      /(?:self[- ]signed certificate(?: in certificate chain)?|certificate verify failed|unable to verify (?:the )?(?:leaf )?signature|unable to get (?:local )?issuer certificate|certificate has expired|expired certificate|certificate (?:subject )?(?:altname|hostname).{0,40}(?:invalid|mismatch)|(?:altname|hostname).{0,40}(?:certificate )?(?:invalid|mismatch)|(?:hostname|ip).{0,40}(?:does not match|mismatch).{0,40}certificate|certificate.{0,40}altname.{0,40}invalid)/i.test(
+        message,
+      ),
+  },
+  {
     code: "ssl",
-    test: ({ message }) =>
-      /ssl/i.test(message) &&
-      /(?:not support|unsupported|required|failed|error|mode)/i.test(message),
+    test: ({ message, sysCode }) =>
+      /^ERR_TLS_/i.test(sysCode) ||
+      (/ssl|tls/i.test(message) &&
+        /(?:not support|unsupported|required|failed|error|mode|handshake)/i.test(message)),
   },
   {
     code: "connection-reset",
@@ -223,12 +311,12 @@ const CONTENT: Record<DbIssueCode, Content> = {
     },
     fixes: [
       {
-        en: "Supabase → your project → Connect → Connection string → URI, and choose the Transaction pooler (port 6543).",
-        ar: "افتح Supabase ← مشروعك ← Connect ← Connection string ← URI واختار Transaction pooler (بورت 6543).",
+        en: "Open the database provider's official connection page and copy its PostgreSQL URI. For Vercel, choose the provider's Transaction Pooler when available; do not use an HTTPS API URL.",
+        ar: "افتح صفحة الاتصال الرسمية عند مزوّد قاعدة البيانات وانسخ رابط PostgreSQL. على Vercel اختار Transaction Pooler لو متاح؛ ما تستخدمش رابط API اللي بيبدأ بـ HTTPS.",
       },
       {
-        en: "Vercel → Project → Settings → Environment Variables → add DATABASE_URL (with ?sslmode=require), then press Save.",
-        ar: "افتح Vercel ← المشروع ← Settings ← Environment Variables ←ضيف DATABASE_URL (مع ?sslmode=require) واضغط Save.",
+        en: "Add DATABASE_URL in Vercel → Project → Settings → Environment Variables, and select the deployment environment you intend to update.",
+        ar: "أضف DATABASE_URL في Vercel ← المشروع ← Settings ← Environment Variables، واختار بيئة النشر المقصودة.",
       },
       {
         en: "Redeploy after saving — environment variables are only picked up by new deployments.",
@@ -249,8 +337,8 @@ const CONTENT: Record<DbIssueCode, Content> = {
         ar: "انسخ الـ URI كامل تاني من Supabase ← Connect ← Connection string ← URI (لازم يبدأ بـ postgresql://).",
       },
       {
-        en: "Expected shape: postgresql://USER:PASSWORD@HOST:6543/postgres?sslmode=require",
-        ar: "الشكل الصح: postgresql://USER:PASSWORD@HOST:6543/postgres?sslmode=require",
+        en: "Example shape only: postgresql://USER:PASSWORD@HOST:6543/postgres?sslmode=verify-full (use the provider's actual host and documented options).",
+        ar: "شكل توضيحي فقط: postgresql://USER:PASSWORD@HOST:6543/postgres?sslmode=verify-full (استخدم الهوست والإعدادات الموثّقة من المزوّد).",
       },
       {
         en: "Replace the whole value in Vercel → Save → Redeploy.",
@@ -397,20 +485,73 @@ const CONTENT: Record<DbIssueCode, Content> = {
     ],
   },
   ssl: {
-    technical: () => "TLS · sslmode",
-    title: { en: "SSL/TLS mismatch", ar: "مشكلة في تشفير الاتصال (SSL)" },
+    technical: () => "TLS · protocol configuration",
+    title: { en: "SSL/TLS configuration mismatch", ar: "إعداد SSL/TLS غير متوافق" },
     summary: {
-      en: "The TLS setting in DATABASE_URL doesn't match what the server expects.",
-      ar: "إعداد SSL في DATABASE_URL مش متطابق مع اللي السيرفر متوقعه.",
+      en: "The database and client could not agree on the TLS protocol settings. This is different from an untrusted certificate; do not disable verification to work around it.",
+      ar: "إعدادات TLS بين الموقع وقاعدة البيانات مش متوافقة. ده مختلف عن شهادة غير موثوقة؛ ما توقفش التحقق من الشهادة كحل بديل.",
     },
     fixes: [
       {
-        en: "Append ?sslmode=require to DATABASE_URL (Supabase requires it).",
-        ar: "ضيف ?sslmode=require لنهاية DATABASE_URL (Supabase محتاجاه).",
+        en: "Copy the PostgreSQL URI and its documented TLS settings from the provider's database connection page; do not use its HTTPS API URL.",
+        ar: "انسخ رابط PostgreSQL وإعداد TLS الموثّق من صفحة اتصال قاعدة البيانات عند المزوّد؛ ما تستخدمش رابط API اللي بيبدأ بـ HTTPS.",
       },
       {
-        en: "Easiest: re-copy the whole URI from Supabase → Connect → URI → replace in Vercel → Save → Redeploy.",
-        ar: "الأسهل: انسخ الـ URI كله من Supabase ← Connect ← URI واستبدله في Vercel ← Save ← Redeploy.",
+        en: "Keep certificate and hostname verification enabled. A TLS protocol mismatch is not fixed by adding sslmode=require blindly.",
+        ar: "سيب التحقق من الشهادة واسم الخادم مفعّل. إضافة sslmode=require عشوائيًا مش حل لتعارض بروتوكول TLS.",
+      },
+      {
+        en: "Check the deployment logs for the provider's TLS requirements, then update the correct Vercel environment and redeploy.",
+        ar: "راجع متطلبات TLS عند المزوّد، وبعدها حدّث بيئة Vercel الصحيحة واعمل Redeploy.",
+      },
+    ],
+  },
+  "tls-certificate": {
+    technical: ({ sysCode }) => {
+      const safeCode = sysCode && TLS_CERTIFICATE_CODES.has(sysCode.toUpperCase())
+        ? sysCode.toUpperCase()
+        : "certificate verification";
+      return `TLS · ${safeCode}`;
+    },
+    title: { en: "Database certificate could not be verified", ar: "تعذّر التحقق من شهادة قاعدة البيانات" },
+    summary: {
+      en: "TLS is enabled, but the certificate chain or hostname could not be trusted. The app keeps certificate verification on; it will not retry with verification disabled.",
+      ar: "تشفير TLS شغال، لكن سلسلة الشهادات أو اسم الخادم ما اتوثقوش. الموقع بيحافظ على التحقق من الشهادة ومش هيعيد الاتصال من غير تحقق.",
+    },
+    fixes: [
+      {
+        en: "From the database provider's official dashboard or TLS documentation, obtain the trusted CA bundle. Do not trust a leaf/server certificate copied from a failed connection.",
+        ar: "هات حزمة CA موثوقة من لوحة المزوّد الرسمية أو توثيق TLS. ما تثقش في شهادة الخادم/الشهادة الطرفية اللي تنسخت من اتصال فاشل.",
+      },
+      {
+        en: "Add DATABASE_SSL_CA to the matching Vercel environment as PEM CA certificate text (real newlines or literal \n escapes). Keep rejectUnauthorized verification enabled.",
+        ar: "أضف DATABASE_SSL_CA في بيئة Vercel المطابقة كنص شهادة CA بصيغة PEM (أسطر فعلية أو \n مكتوبة حرفيًا). سيب التحقق من الشهادة مفعّل.",
+      },
+      {
+        en: "Check that DATABASE_URL is the provider's PostgreSQL URI and its host matches the certificate. Save the correct Production/Preview scope and redeploy.",
+        ar: "اتأكد إن DATABASE_URL رابط PostgreSQL من المزوّد وإن الهوست مطابق للشهادة. اختار Production أو Preview الصح، احفظ، وبعدها اعمل Redeploy.",
+      },
+    ],
+  },
+  "ssl-config": {
+    technical: () => "TLS · invalid database SSL configuration",
+    title: { en: "Database SSL settings need attention", ar: "إعدادات SSL لقاعدة البيانات محتاجة مراجعة" },
+    summary: {
+      en: "The configured PostgreSQL SSL options are invalid or conflict. No insecure fallback was attempted.",
+      ar: "خيارات SSL المضافة لرابط PostgreSQL غير صالحة أو متعارضة. ما حصلش أي تحويل تلقائي لاتصال غير آمن.",
+    },
+    fixes: [
+      {
+        en: "Remove NODE_TLS_REJECT_UNAUTHORIZED=0, sslmode=no-verify, remote ssl=false/sslmode=disable, or uselibpqcompat=true combined with require/prefer/verify-ca. Use verified TLS (prefer verify-full) instead.",
+        ar: "احذف NODE_TLS_REJECT_UNAUTHORIZED=0 وsslmode=no-verify وتعطيل SSL لقاعدة بعيدة وuselibpqcompat=true مع require/prefer/verify-ca. استخدم TLS موثوقًا، ويفضل verify-full.",
+      },
+      {
+        en: "If the provider requires a private CA, add its official PEM CA bundle using DATABASE_SSL_CA; do not put certificate paths or private keys in DATABASE_URL.",
+        ar: "لو المزوّد محتاج CA خاصة، أضف حزمة PEM الرسمية في DATABASE_SSL_CA؛ ما تحطش مسارات ملفات أو مفاتيح خاصة داخل DATABASE_URL.",
+      },
+      {
+        en: "If you intentionally use local PostgreSQL without TLS, keep the host local and set sslmode=disable explicitly. Redeploy after changing Vercel variables.",
+        ar: "لو قاصد تشغّل PostgreSQL محلي من غير TLS، خلي الهوست محلي واكتب sslmode=disable صراحةً. بعد تعديل متغيرات Vercel اعمل Redeploy.",
       },
     ],
   },
@@ -426,7 +567,7 @@ const CONTENT: Record<DbIssueCode, Content> = {
         en: "Use the Transaction pooler (host ….pooler.supabase.com, port 6543) from Vercel instead of the direct connection.",
         ar: "استخدم Transaction pooler (هوست ….pooler.supabase.com، بورت 6543) من Vercel بدل الاتصال المباشر.",
       },
-      { en: "Keep ?sslmode=require at the end of DATABASE_URL.", ar: "سيب ?sslmode=require في نهاية DATABASE_URL." },
+      { en: "Keep the provider's documented verified TLS mode; never use sslmode=no-verify as a workaround.", ar: "التزم بوضع TLS الموثّق واللي بيتحقق من الشهادة؛ ما تستخدمش sslmode=no-verify كحل بديل." },
       {
         en: "It can also be transient — Redeploy / retry once, and check status.supabase.com if it persists.",
         ar: "ممكن يكون مؤقت — اعمل Redeploy/جرب تاني، ولو استمر راجع status.supabase.com.",
@@ -499,8 +640,8 @@ const CONTENT: Record<DbIssueCode, Content> = {
     },
     fixes: [
       {
-        en: "Compare DATABASE_URL in Vercel with the URI from Supabase → Connect (host, port 6543, ?sslmode=require).",
-        ar: "قارن DATABASE_URL في Vercel مع الـ URI من Supabase ← Connect (الهوست، بورت 6543، ?sslmode=require).",
+        en: "Compare DATABASE_URL in Vercel with the provider's PostgreSQL URI (host, pooler/direct port, and documented TLS settings). Do not replace a PostgreSQL URI with an HTTPS API URL.",
+        ar: "قارن DATABASE_URL في Vercel برابط PostgreSQL من المزوّد (الهوست، بورت البولر/المباشر، وإعداد TLS الموثّق). ما تستبدلش رابط PostgreSQL برابط API يبدأ بـ HTTPS.",
       },
       {
         en: "Test the same URL from your machine: set DATABASE_URL locally and run `npm run db:check`.",
@@ -515,22 +656,77 @@ const CONTENT: Record<DbIssueCode, Content> = {
 /*  Public API                                                         */
 /* ------------------------------------------------------------------ */
 
-function extract(err: unknown): { name: string; message: string; pgCode: string; sysCode: string } {
-  if (err instanceof Error) {
-    const anyErr = err as Error & { code?: unknown; errno?: unknown };
-    const code = typeof anyErr.code === "string" ? anyErr.code : "";
-    // SQLSTATE is 5 chars of digits/uppercase letters (e.g. 28P01, 42501).
-    const pgCode = /^[0-9A-Z]{5}$/.test(code) ? code : "";
-    const sysCode = code && !pgCode ? code : "";
-    return { name: err.name ?? "", message: err.message ?? "", pgCode, sysCode };
+type ErrorFacts = {
+  name: string;
+  message: string;
+  pgCode: string;
+  sysCode: string;
+};
+
+const MAX_CAUSE_DEPTH = 8;
+
+/** Read a bounded cause chain without serializing Error objects or stack traces. */
+function extractErrorChain(error: unknown): ErrorFacts[] {
+  const parts: ErrorFacts[] = [];
+  const seen = new Set<object>();
+  let current: unknown = error;
+
+  for (let depth = 0; depth < MAX_CAUSE_DEPTH && current != null; depth++) {
+    if (typeof current === "string") {
+      parts.push({ name: "", message: current, pgCode: "", sysCode: "" });
+      break;
+    }
+    if ((typeof current !== "object" && typeof current !== "function") || current === null) {
+      break;
+    }
+
+    const object = current as Record<string, unknown>;
+    if (seen.has(object)) break;
+    seen.add(object);
+
+    let name = "";
+    let message = "";
+    let rawCode = "";
+    let cause: unknown;
+    try {
+      name = typeof object.name === "string" ? object.name : "";
+      message = typeof object.message === "string" ? object.message : "";
+      rawCode =
+        typeof object.code === "string"
+          ? object.code
+          : typeof object.errno === "string"
+            ? object.errno
+            : "";
+      cause = object.cause;
+    } catch {
+      // Hostile/custom getters do not prevent a safe generic diagnosis.
+    }
+
+    const pgCode = /^[0-9A-Z]{5}$/.test(rawCode) ? rawCode : "";
+    const sysCode = rawCode && !pgCode ? rawCode : "";
+    parts.push({ name, message, pgCode, sysCode });
+    current = cause;
   }
-  if (typeof err === "string") return { name: "", message: err, pgCode: "", sysCode: "" };
-  return { name: "", message: "", pgCode: "", sysCode: "" };
+
+  return parts.length
+    ? parts
+    : [{ name: "", message: "", pgCode: "", sysCode: "" }];
 }
 
 /** Extra fixes derived from the (never displayed) DATABASE_URL shape. */
 function urlShapeFixes(shape: UrlShape | null, code: DbIssueCode): DiagnosisFix[] {
-  if (!shape || shape.isLocal) return [];
+  if (
+    !shape ||
+    shape.isLocal ||
+    code === "missing-url" ||
+    code === "malformed-url" ||
+    code === "tls-certificate" ||
+    code === "ssl" ||
+    code === "ssl-config"
+  ) {
+    return [];
+  }
+
   const fixes: DiagnosisFix[] = [];
 
   if (shape.isSupabase && shape.port === 5432 && !shape.isPoolerHost) {
@@ -547,46 +743,58 @@ function urlShapeFixes(shape: UrlShape | null, code: DbIssueCode): DiagnosisFix[
     });
   }
 
-  if (!shape.sslmode || shape.sslmode !== "require") {
-    fixes.push({
-      en: "DATABASE_URL is missing ?sslmode=require — append it before saving.",
-      ar: "DATABASE_URL ناقص ?sslmode=require — ضيفه قبل الحفظ.",
-    });
-  }
-
-  // Avoid flooding the list when the category already explains it.
-  if (code === "missing-url" || code === "malformed-url") return [];
   return fixes;
 }
 
 /**
  * Classify a database failure into a safe, bilingual diagnosis.
- * Never throws and never returns secrets.
+ * Never throws and never returns secrets. Cause traversal is bounded and cycle-safe.
  */
 export function diagnoseDbError(error: unknown, databaseUrl?: string): DbDiagnosis {
-  const { name, message, pgCode, sysCode } = extract(error);
-  const raw = message || name || (error == null ? "" : "unknown error");
+  const parts = extractErrorChain(error);
+  let matchedRule: Rule | undefined;
+  let matchedPart: ErrorFacts | undefined;
 
-  let code: DbIssueCode = "unknown";
   for (const rule of RULES) {
-    if (rule.test({ name, message: raw, pgCode, sysCode })) {
-      code = rule.code;
-      break;
+    for (const part of parts) {
+      if (rule.test(part)) {
+        matchedRule = rule;
+        matchedPart = part;
+        break;
+      }
     }
+    if (matchedRule) break;
   }
+
+  const code = matchedRule?.code ?? "unknown";
+  const displayPart =
+    matchedPart ??
+    parts.find((part) => part.message || part.sysCode || part.pgCode || part.name) ??
+    parts[0];
+  const raw =
+    displayPart.message ||
+    displayPart.sysCode ||
+    displayPart.pgCode ||
+    displayPart.name ||
+    (error == null ? "" : "unknown error");
 
   const content = CONTENT[code] ?? CONTENT.unknown;
   const detail = sanitizeDbMessage(raw);
-
   const url =
     databaseUrl ?? (typeof process !== "undefined" ? process.env?.DATABASE_URL : undefined);
   const shape = readUrlShape(url);
-
   const fixes = [...content.fixes, ...urlShapeFixes(shape, code)];
+
+  const safeSystemCode = SAFE_SYSTEM_CODES.has(displayPart.sysCode.toUpperCase())
+    ? displayPart.sysCode.toUpperCase()
+    : "";
 
   return {
     code,
-    technical: content.technical({ pgCode, sysCode }),
+    technical: content.technical({
+      pgCode: displayPart.pgCode,
+      sysCode: safeSystemCode,
+    }),
     title: content.title,
     summary: content.summary,
     fixes,

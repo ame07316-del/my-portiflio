@@ -12,6 +12,8 @@ import fs from "node:fs";
 import path from "node:path";
 import bcrypt from "bcryptjs";
 import { initializeDatabase, postgresTransaction, type Driver, type ManagedDriver } from "@/lib/db-bootstrap";
+import { diagnoseDbError } from "@/lib/diagnose";
+import { buildPostgresConnectionConfig } from "@/lib/postgres-config.mjs";
 import { DEFAULT_ADMIN_TOKEN, isProductionRuntime } from "@/lib/secret";
 
 type Row = Record<string, unknown>;
@@ -31,28 +33,12 @@ const globalForDb = globalThis as unknown as {
   __pf_db_info?: DbInfo;
 };
 
-/** Small helper so Supabase / Neon URLs "just work". */
-function pgConfig(url: string) {
-  const parsed = new URL(url);
-  const disableSsl =
-    parsed.hostname === "localhost" ||
-    parsed.hostname === "127.0.0.1" ||
-    parsed.searchParams.get("sslmode") === "disable";
-
-  return {
-    connectionString: url,
-    // Managed providers use certificates Node doesn't ship with.
-    ssl: disableSsl ? false : ({ rejectUnauthorized: false } as const),
-    // Serverless friendly: tiny pool, drop idle connections quickly.
-    max: Number(process.env.DATABASE_POOL_MAX ?? 3),
-    idleTimeoutMillis: 10_000,
-    connectionTimeoutMillis: 15_000,
-    keepAlive: true,
-    application_name: "portfolio",
-    host: parsed.hostname,
-    database: parsed.pathname.replace(/^\//, "") || "postgres",
-    sslEnabled: !disableSsl,
-  };
+/** Shared with scripts/db.mjs; URL parsing and TLS policy live in one module. */
+export function getApplicationPostgresConnectionConfig(
+  url: string,
+  ca?: string | null,
+) {
+  return buildPostgresConnectionConfig(url, ca);
 }
 
 export class MissingDatabaseUrlError extends Error {
@@ -78,18 +64,22 @@ async function createDriver(): Promise<ManagedDriver> {
 
   if (url) {
     const { Pool } = await import("pg");
-    const cfg = pgConfig(url);
+    const cfg = getApplicationPostgresConnectionConfig(
+      url,
+      process.env.DATABASE_SSL_CA,
+    );
     const pool = new Pool({
-      connectionString: cfg.connectionString,
-      ssl: cfg.ssl,
-      max: cfg.max,
-      idleTimeoutMillis: cfg.idleTimeoutMillis,
-      connectionTimeoutMillis: cfg.connectionTimeoutMillis,
-      keepAlive: cfg.keepAlive,
-      application_name: cfg.application_name,
+      ...cfg.pgConfig,
+      // Serverless friendly: small pool, drop idle connections quickly.
+      max: Number(process.env.DATABASE_POOL_MAX ?? 3),
+      idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 15_000,
+      keepAlive: true,
+      application_name: cfg.pgConfig.application_name ?? "portfolio",
     });
     pool.on("error", (err) => {
-      console.error("[db] idle client error:", err.message);
+      const diagnosis = diagnoseDbError(err);
+      console.error("[db] idle client error:", diagnosis.technical, diagnosis.detail);
     });
 
     let version: string;

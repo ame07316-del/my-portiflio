@@ -99,6 +99,70 @@ const CASES: Case[] = [
     expect: "ssl",
   },
   {
+    label: "self-signed certificate message only",
+    error: new Error("self-signed certificate in certificate chain"),
+    expect: "tls-certificate",
+    required: ["TLS · certificate verification", "DATABASE_SSL_CA"],
+    forbidden: ["sslmode=require"],
+  },
+  {
+    label: "certificate hostname mismatch message only",
+    error: new Error("Hostname/IP does not match certificate's altnames"),
+    expect: "tls-certificate",
+    required: ["DATABASE_SSL_CA"],
+    forbidden: ["sslmode=require"],
+  },
+  {
+    label: "TLS error code embedded in message only",
+    error: new Error("TLS handshake failed: UNABLE_TO_GET_ISSUER_CERT_LOCALLY"),
+    expect: "tls-certificate",
+    required: ["DATABASE_SSL_CA"],
+    forbidden: ["sslmode=require"],
+  },
+  {
+    label: "unsafe legacy SSL configuration",
+    error: Object.assign(
+      new Error("NODE_TLS_REJECT_UNAUTHORIZED=0 is unsupported; DATABASE_URL uses sslmode=no-verify"),
+      { name: "PostgresConnectionConfigError", code: "DATABASE_SSL_CONFIG" },
+    ),
+    expect: "ssl-config",
+    required: ["uselibpqcompat=true", "verify-full"],
+    forbidden: ["sslmode=require"],
+  },
+  ...[
+    "SELF_SIGNED_CERT_IN_CHAIN",
+    "DEPTH_ZERO_SELF_SIGNED_CERT",
+    "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+    "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+    "CERT_HAS_EXPIRED",
+    "ERR_TLS_CERT_ALTNAME_INVALID",
+  ].map((tlsCode) => ({
+    label: `TLS certificate code only: ${tlsCode}`,
+    error: Object.assign(new Error(""), { code: tlsCode }),
+    expect: "tls-certificate" as const,
+    required: [tlsCode, "DATABASE_SSL_CA"],
+    forbidden: ["sslmode=require"],
+  })),
+  {
+    label: "nested TLS cause and sensitive certificate/path details",
+    error: Object.assign(
+      new Error("database connection failed"),
+      {
+        cause: Object.assign(
+          new Error(
+            `self-signed certificate in certificate chain; ` +
+              `user "postgres.abcdefghijkl" password=${SECRET} ${POOLER_URL} ` +
+              `open '/vercel/private/db-ca.pem' -----BEGIN CERTIFICATE-----\\nCA_PRIVATE_CONTENT\\n-----END CERTIFICATE-----`,
+          ),
+          { code: "SELF_SIGNED_CERT_IN_CHAIN" },
+        ),
+      },
+    ),
+    expect: "tls-certificate",
+    forbidden: [SECRET, "postgres.abcdefghijkl", "postgresql://", "CA_PRIVATE_CONTENT", "/vercel/private", "-----BEGIN CERTIFICATE-----", "sslmode=require"],
+    required: ["TLS · SELF_SIGNED_CERT_IN_CHAIN", "DATABASE_SSL_CA"],
+  },
+  {
     label: "connection reset",
     error: sysError("ECONNRESET", "read ECONNRESET — connection terminated unexpectedly"),
     expect: "connection-reset",
@@ -129,6 +193,14 @@ const CASES: Case[] = [
     expect: "unknown",
   },
   {
+    label: "untrusted error code cannot leak a URL or credential",
+    error: Object.assign(new Error("socket failure"), {
+      code: `postgresql://user:${SECRET}@db.private.internal:5432/postgres`,
+    }),
+    expect: "unknown",
+    forbidden: [SECRET, "postgresql://", "db.private.internal"],
+  },
+  {
     label: "direct connection URL shape → 6543 hint",
     error: pgError("28P01", 'password authentication failed for user "postgres.abcdefghijkl"'),
     expect: "wrong-password",
@@ -142,7 +214,7 @@ const CASES: Case[] = [
     expect: "connection-refused",
     url: `postgresql://postgres.abcdefghijkl:${SECRET}@db.abcdefghijkl.supabase.co:5432/postgres`,
     forbidden: [SECRET, "postgresql://"],
-    required: ["sslmode=require"],
+    required: ["6543"],
   },
   {
     label: "pooler port with non-pooler user → user hint",
@@ -201,19 +273,50 @@ for (const c of CASES) {
 
 /* Extra sanitizer unit checks ------------------------------------- */
 
+const cyclicError = new Error("cyclic error cause");
+Object.defineProperty(cyclicError, "cause", { value: cyclicError });
+check(
+  diagnoseDbError(cyclicError).code === "unknown",
+  "cyclic causes should stop safely without looping",
+);
+
 console.log("\nSanitizer checks…");
 const sanitizers: Array<[string, string]> = [
   ["plain url", `failed: ${POOLER_URL}`],
   ["user", 'authentication failed for user "postgres.abcdefghijkl"'],
   ["ip", "connect ECONNREFUSED 10.1.2.3:6543"],
+  ["ipv6", "connect ECONNREFUSED [2001:db8::7]:6543"],
   ["host", "getaddrinfo ENOTFOUND my-db.prod.supabase.co"],
+  ["private host", "TLS error for db.production.internal:6543"],
+  ["relative certificate path", "open '../.private/db-ca.pem'"],
   ["mixed", `x ${POOLER_URL} y for user "z" at 10.0.0.1:6543 via api.supabase.com`],
+  [
+    "certificate and path",
+    `TLS error for user "db-user" password=do-not-show open '/var/private/provider-ca.pem' -----BEGIN CERTIFICATE-----\\nCERT_DATA_DO_NOT_SHOW\\n-----END CERTIFICATE-----`,
+  ],
 ];
 for (const [label, input] of sanitizers) {
   const out = sanitizeDbMessage(input);
   check(!looksLeaky(out), `[sanitize:${label}] leaky output: ${out}`);
   check(!out.includes(SECRET), `[sanitize:${label}] password leaked`);
   check(!out.includes("abcdefghijkl"), `[sanitize:${label}] username leaked`);
+  if (label === "ipv6") {
+    check(out.includes("[host]:6543"), "[sanitize:ipv6] expected IPv6 address and port mask");
+    check(!out.includes("2001:db8::7"), "[sanitize:ipv6] raw address leaked");
+  }
+  if (label === "private host") {
+    check(out.includes("*.internal"), "[sanitize:private host] expected generic suffix mask");
+    check(!out.includes("db.production.internal"), "[sanitize:private host] raw hostname leaked");
+  }
+  if (label === "relative certificate path") {
+    check(out.includes("[path]"), "[sanitize:relative certificate path] expected path mask");
+    check(!out.includes(".private"), "[sanitize:relative certificate path] path leaked");
+  }
+  if (label === "certificate and path") {
+    for (const bad of ["do-not-show", "db-user", "/var/private", "CERT_DATA_DO_NOT_SHOW", "-----BEGIN CERTIFICATE-----"]) {
+      check(!out.includes(bad), `[sanitize:${label}] sensitive value leaked: ${bad}`);
+    }
+  }
   console.log(`  ✓ ${label}: ${out}`);
 }
 
@@ -237,6 +340,30 @@ async function renderChecks() {
   check(html.includes("28P01"), "expected technical code 28P01 in HTML");
   check(html.includes("باسورد"), "expected Arabic fix text in HTML");
   check(html.includes("password authentication failed"), "expected sanitized English detail in HTML");
+
+  const tlsSecret = "tls-password-do-not-echo";
+  const tlsError = Object.assign(
+    new Error(
+      `self-signed certificate in certificate chain ${POOLER_URL} user=postgres.abcdefghijkl ` +
+        `password=${tlsSecret} open '/vercel/private/ca.pem' ` +
+        "-----BEGIN CERTIFICATE-----\\nCA_BODY_DO_NOT_ECHO\\n-----END CERTIFICATE-----",
+    ),
+    { code: "SELF_SIGNED_CERT_IN_CHAIN" },
+  );
+  const tlsHtml = renderToStaticMarkup(createElement(SetupNotice, { error: tlsError }));
+  for (const bad of [
+    tlsSecret,
+    "postgres.abcdefghijkl",
+    "postgresql://",
+    "/vercel/private",
+    "CA_BODY_DO_NOT_ECHO",
+    "-----BEGIN CERTIFICATE-----",
+    "sslmode=require",
+  ]) {
+    check(!tlsHtml.includes(bad), `TLS RENDER LEAK: "${bad}" visible in page HTML`);
+  }
+  check(tlsHtml.includes("SELF_SIGNED_CERT_IN_CHAIN"), "TLS code should be shown safely");
+  check(tlsHtml.includes("DATABASE_SSL_CA"), "TLS diagnosis should name the CA setting");
 
   const missing = renderToStaticMarkup(
     createElement(SetupNotice, {
