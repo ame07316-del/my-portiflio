@@ -82,17 +82,27 @@ cp .env.example .env.local
 ```
 
 ```env
-DATABASE_URL="postgresql://user:pass@host:6543/postgres?sslmode=require"
+DATABASE_URL="postgresql://USER:FAKE_PASSWORD@pooler.example.test:6543/postgres?sslmode=verify-full"
+# Optional: DATABASE_SSL_CA="-----BEGIN CERTIFICATE-----\n...provider CA PEM...\n-----END CERTIFICATE-----"
 AUTH_SECRET="a-long-random-string"     # openssl rand -base64 32
 ADMIN_EMAIL="you@example.com"
 ADMIN_PASSWORD="something-strong"
 ```
 
+All PostgreSQL connections default to verified TLS (including local PostgreSQL).
+For local plaintext, set `sslmode=disable` explicitly; remote plaintext is
+rejected. If the
+provider requires a private CA, set `DATABASE_SSL_CA` to its official PEM CA
+bundle (real newlines or literal `\n`); do not use `sslmode=no-verify`,
+`rejectUnauthorized: false`, `NODE_TLS_REJECT_UNAUTHORIZED=0`, or a certificate
+copied from a failed connection.
+See the Arabic database guide for Vercel environment scoping and safe TLS setup.
+
 ### Database CLI
 
 | Command | What it does |
 |---|---|
-| `npm run db:check` | test the connection, list tables and row counts |
+| `npm run db:check` | run read-only connection/version and table-count queries |
 | `npm run db:push` | create/patch every table (idempotent) |
 | `npm run db:export -- backup.json` | dump all content to JSON |
 | `npm run db:import -- backup.json` | restore content from JSON |
@@ -123,7 +133,8 @@ download, restore-from-file and a "run migrations" button.
 
 | Name | Value |
 |---|---|
-| `DATABASE_URL` | Supabase **Transaction pooler** URI (port 6543) + `?sslmode=require` |
+| `DATABASE_URL` | Provider's PostgreSQL URI; on Supabase/Vercel use **Transaction Pooler** (usually port 6543) and its documented TLS options |
+| `DATABASE_SSL_CA` | Optional verified PEM CA bundle only when the provider requires a custom CA; never use a leaf certificate or disable verification |
 | `AUTH_SECRET` | `openssl rand -base64 32` |
 | `ADMIN_TOKEN` | the key that opens `/admin` — **set your own**, never ship the default |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | seeded `users` row (Account screen) |

@@ -14,25 +14,48 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { pathToFileURL } from "node:url";
+import { buildPostgresConnectionConfig } from "../src/lib/postgres-config.mjs";
 
 /* ------------------------------ env loading ------------------------------ */
 
-for (const file of [".env.local", ".env"]) {
-  const p = path.join(process.cwd(), file);
-  if (!fs.existsSync(p)) continue;
-  for (const line of fs.readFileSync(p, "utf8").split("\n")) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/i);
-    if (!m) continue;
-    const key = m[1];
-    let value = m[2].trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
+export function loadEnvFiles(cwd = process.cwd(), environment = process.env) {
+  for (const file of [".env.local", ".env"]) {
+    const p = path.join(cwd, file);
+    if (!fs.existsSync(p)) continue;
+
+    const lines = fs.readFileSync(p, "utf8").split(/\r?\n/);
+    for (let index = 0; index < lines.length; index++) {
+      const match = lines[index].match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/i);
+      if (!match) continue;
+
+      const key = match[1];
+      let value = match[2].trim();
+      const quote = value[0];
+      if ((quote === '"' || quote === "'") && !value.endsWith(quote)) {
+        const parts = [value.slice(1)];
+        while (++index < lines.length) {
+          const line = lines[index];
+          const closingQuote = line.lastIndexOf(quote);
+          if (closingQuote >= 0) {
+            parts.push(line.slice(0, closingQuote));
+            break;
+          }
+          parts.push(line);
+        }
+        value = parts.join("\n");
+      } else if ((quote === '"' || quote === "'") && value.endsWith(quote)) {
+        value = value.slice(1, -1);
+      }
+
+      if (!(key in environment) || !environment[key]) environment[key] = value;
     }
-    if (!(key in process.env) || !process.env[key]) process.env[key] = value;
   }
+}
+
+/** Testable alias: the app and CLI intentionally share the same parser/policy. */
+export function getCliPostgresConnectionConfig(url, ca) {
+  return buildPostgresConnectionConfig(url, ca);
 }
 
 const TABLES = [
@@ -63,18 +86,19 @@ async function connect(urlOverride) {
 
   if (url) {
     const { Pool } = await import("pg");
-    const parsed = new URL(url);
-    const local =
-      parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+    const config = getCliPostgresConnectionConfig(
+      url,
+      process.env.DATABASE_SSL_CA,
+    );
     const pool = new Pool({
-      connectionString: url,
-      ssl: local ? false : { rejectUnauthorized: false },
+      ...config.pgConfig,
       max: 2,
       connectionTimeoutMillis: 20_000,
     });
+    const port = config.pgConfig.port;
     return {
       kind: "postgres",
-      label: `${parsed.hostname}${parsed.port ? `:${parsed.port}` : ""}/${parsed.pathname.slice(1) || "postgres"}`,
+      label: `${config.host}${port ? `:${port}` : ""}/${config.database}`,
       query: (text, params = []) => pool.query(text, params),
       exec: (text) => pool.query(text),
       end: () => pool.end(),
@@ -263,43 +287,45 @@ async function cmdCopyLocal() {
 
 /* --------------------------------- main ---------------------------------- */
 
-const [, , cmd, arg] = process.argv;
+async function main() {
+  const [, , cmd, arg] = process.argv;
 
-try {
-  switch (cmd) {
-    case "check":
-      await cmdCheck();
-      break;
-    case "push":
-      await cmdPush();
-      break;
-    case "export":
-      await cmdExport(arg);
-      break;
-    case "import":
-      await cmdImport(arg);
-      break;
-    case "copy-local":
-      await cmdCopyLocal();
-      break;
-    default:
-      console.log(`
-${c.bold("Portfolio database CLI")}
+  try {
+    switch (cmd) {
+      case "check":
+        await cmdCheck();
+        break;
+      case "push":
+        await cmdPush();
+        break;
+      case "export":
+        await cmdExport(arg);
+        break;
+      case "import":
+        await cmdImport(arg);
+        break;
+      case "copy-local":
+        await cmdCopyLocal();
+        break;
+      default:
+        console.log(`\n${c.bold("Portfolio database CLI")}\n\n  npm run db:check              test the connection, list tables & row counts\n  npm run db:push               create/patch tables (idempotent)\n  npm run db:export -- out.json dump all content to JSON\n  npm run db:import -- out.json restore content from JSON\n  npm run db:copy-local         copy the local dev database into DATABASE_URL\n`);
+    }
+  } catch (err) {
+    const message = typeof err?.message === "string" ? err.message : "Unknown database CLI error";
+    console.error(`\n${c.red("✗ " + message)}\n`);
+    if (err?.code === "ENOTFOUND" || err?.code === "ETIMEDOUT") {
+      console.error(
+        c.dim("  Check the host in DATABASE_URL, and that your IP is allowed.\n"),
+      );
+    }
+    process.exit(1);
+  }
+}
 
-  npm run db:check              test the connection, list tables & row counts
-  npm run db:push               create/patch tables (idempotent)
-  npm run db:export -- out.json dump all content to JSON
-  npm run db:import -- out.json restore content from JSON
-  npm run db:copy-local         copy the local dev database into DATABASE_URL
-`);
-  }
-  process.exit(0);
-} catch (err) {
-  console.error(`\n${c.red("✗ " + (err?.message ?? err))}\n`);
-  if (err?.code === "ENOTFOUND" || err?.code === "ETIMEDOUT") {
-    console.error(
-      c.dim("  Check the host in DATABASE_URL, and that your IP is allowed.\n"),
-    );
-  }
-  process.exit(1);
+const invokedFile = process.argv[1]
+  ? pathToFileURL(path.resolve(process.argv[1])).href
+  : "";
+if (invokedFile === import.meta.url) {
+  loadEnvFiles();
+  void main();
 }

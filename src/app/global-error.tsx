@@ -10,12 +10,14 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
-  }, [error]);
+    // Error messages can include database/TLS details; never expose them in the
+    // visitor's browser console. Server-side SetupNotice provides safe hints.
+    console.error("[global-error] Rendering failed.");
+  }, []);
 
   const isDbConfig =
-    error.message?.includes("DATABASE_URL") ||
-    error.name === "MissingDatabaseUrlError";
+    error.name === "MissingDatabaseUrlError" ||
+    /DATABASE_URL is not set/i.test(error.message ?? "");
 
   return (
     <html lang="en">

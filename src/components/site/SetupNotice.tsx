@@ -3,10 +3,10 @@ import { diagnoseDbError } from "@/lib/diagnose";
 /**
  * Shown instead of a crash when the app can't reach the database yet.
  *
- * The raw driver error is classified by `diagnoseDbError`, which strips
- * credentials / connection strings / usernames / hosts — so only a safe
- * technical code, a bilingual diagnosis and bilingual fix steps reach
- * the page (production included).
+ * The raw driver error/cause chain is classified by `diagnoseDbError`, which
+ * strips credentials, connection strings, usernames, hosts, PEM blocks and
+ * sensitive paths — only a safe technical code, bilingual diagnosis and fix
+ * steps reach the page (production included).
  */
 export default function SetupNotice({
   error,
