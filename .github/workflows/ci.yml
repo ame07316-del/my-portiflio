@@ -44,9 +44,10 @@ jobs:
       - run: npm run build
       - name: "TESTS (diag: base64 notice annotation)"
         run: |
+          echo "::notice title=DIAG-ALIVE::probe ok"
           node --test dist/server/src/tests/*.test.js > /tmp/t.log 2>&1; RC=$?
           tail -c 3000 /tmp/t.log
-          base64 -w0 /tmp/t.log | tail -c 60000 > /tmp/t.b64
+          base64 -w0 /tmp/t.log | tail -c 20000 > /tmp/t.b64
           echo "::notice title=DIAG-SERVER-TESTS-rc=$RC::$(cat /tmp/t.b64)"
           exit $RC
       - name: "Load storm (diag: base64 notice annotation)"
@@ -60,7 +61,7 @@ jobs:
           RC=$?
           kill %1 2>/dev/null
           tail -c 3000 /tmp/storm.log
-          { echo '== control-plane.log (tail)'; tail -c 40000 /tmp/cp.log; echo; echo '== load-test.log (tail)'; tail -c 40000 /tmp/storm.log; } | base64 -w0 | tail -c 60000 > /tmp/storm.b64
+          { echo '== control-plane.log (tail)'; tail -c 8000 /tmp/cp.log; echo; echo '== load-test.log (tail)'; tail -c 8000 /tmp/storm.log; } | base64 -w0 > /tmp/storm.b64
           echo "::notice title=DIAG-STORM-rc=$RC::$(cat /tmp/storm.b64)"
           exit $RC
   e2e:
