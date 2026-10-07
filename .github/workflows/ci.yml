@@ -47,10 +47,11 @@ jobs:
           set +e
           node --test dist/server/src/tests/*.test.js > /tmp/t.log 2>&1
           RC=$?
-          tail -c 3000 /tmp/t.log
-          B64=$(base64 -w0 /tmp/t.log)
-          if [ ${#B64} -gt 60000 ]; then B64=${B64: -60000}; fi
-          echo "::notice title=DIAG-SERVER-TESTS-rc=$RC::${B64}"
+          tail -c 1200 /tmp/t.log
+          T=$(tail -c 2800 /tmp/t.log | base64 -w0)
+          F=$(grep -n -A 30 'not ok' /tmp/t.log | head -c 2800 | base64 -w0)
+          echo "::notice title=DIAG-TESTS-rc=$RC-tail::${T}"
+          echo "::notice title=DIAG-TESTS-rc=$RC-fail::${F}"
           exit $RC
       - name: "Load storm (diag: base64 notice annotation)"
         run: |
@@ -63,9 +64,11 @@ jobs:
           node scripts/load-test.mjs > /tmp/storm.log 2>&1
           RC=$?
           kill %1 2>/dev/null
-          tail -c 3000 /tmp/storm.log
-          { echo '== control-plane.log (tail)'; tail -c 8000 /tmp/cp.log; echo; echo '== load-test.log (tail)'; tail -c 8000 /tmp/storm.log; } | base64 -w0 > /tmp/storm.b64
-          echo "::notice title=DIAG-STORM-rc=$RC::$(cat /tmp/storm.b64)"
+          tail -c 1200 /tmp/storm.log
+          CP=$(tail -c 2800 /tmp/cp.log | base64 -w0)
+          ST=$(tail -c 2800 /tmp/storm.log | base64 -w0)
+          echo "::notice title=DIAG-STORM-rc=$RC-cp::${CP}"
+          echo "::notice title=DIAG-STORM-rc=$RC-load::${ST}"
           exit $RC
   e2e:
     name: E2E · Playwright (Chromium)

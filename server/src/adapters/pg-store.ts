@@ -2,6 +2,37 @@ import pg from 'pg';
 import type { AccountRow, EventRow, LedgerStore, OutboxRow, TransferInput, TransferResult } from '../ports/store.js';
 import { SCHEMA_SQL } from './pglite-store.js';
 interface TxClient { query<T>(sql: string, params?: unknown[]): Promise<{ rows: T[]; rowCount: number | null }>; }
+
+/**
+ * node-postgres speaks the EXTENDED protocol: one statement per query.
+ * (PGlite.exec batches, which is why the shared schema string runs as one
+ * statement on the embedded engine and must be split for real Postgres.)
+ * Splits on top-level semicolons only — the $$-quoted DO block is opaque.
+ */
+export function splitSchemaStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let current = '';
+  let inDollarQuote = false;
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql.charAt(i);
+    if (ch === '$' && sql.charAt(i + 1) === '$') {
+      inDollarQuote = !inDollarQuote;
+      current += '$$';
+      i += 1;
+      continue;
+    }
+    if (ch === ';' && !inDollarQuote) {
+      const trimmed = current.trim();
+      if (trimmed.length > 0) statements.push(trimmed);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  const trimmed = current.trim();
+  if (trimmed.length > 0) statements.push(trimmed);
+  return statements;
+}
 export class PgStore implements LedgerStore {
   readonly #pool: pg.Pool;
   #listener: pg.Client | null = null;
@@ -20,7 +51,11 @@ export class PgStore implements LedgerStore {
       idleTimeoutMillis: 10_000,
     });
   }
-  async init(): Promise<void> { await this.#pool.query(SCHEMA_SQL); }
+  async init(): Promise<void> {
+    for (const statement of splitSchemaStatements(SCHEMA_SQL)) {
+      await this.#pool.query(statement);
+    }
+  }
   async #scopedTx<T>(tenant: string, fn: (c: TxClient) => Promise<T>): Promise<T> {
     const client = await this.#pool.connect();
     try {
