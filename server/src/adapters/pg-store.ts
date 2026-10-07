@@ -105,8 +105,8 @@ export class PgStore implements LedgerStore {
 
         // 2) Read both rows in ONE round trip (RLS already scopes them) —
         //    fast reject of not_found / insufficient WITHOUT taking a lock.
-        const read = await c.query<{ id: string; balance: string }>(
-          `SELECT id, balance FROM accounts WHERE id IN ($1, $2)`,
+        const read = await c.query<{ id: string; balance: string; version: string }>(
+          `SELECT id, balance, version FROM accounts WHERE id IN ($1, $2)`,
           [input.from, input.to],
         );
         const from = read.rows.find((r) => r.id === input.from);
@@ -114,53 +114,66 @@ export class PgStore implements LedgerStore {
         if (from === undefined || to === undefined) return { ok: false, code: 'not_found' as const };
         if (Number(from.balance) < input.amount) return { ok: false, code: 'insufficient_funds' as const };
 
-        // 3) THE whole transfer in ONE atomic statement, LOCK-FIRST: the
-        //    debit UPDATE acquires the row lock; under that lock the rest of
-        //    the statement sees the latest committed state, so there are no
-        //    stale-version conflicts — hot rows serialize on the lock itself,
-        //    and the balance guard is re-checked under the lock (authoritative).
-        //    Critical section (lock → COMMIT) = this statement + COMMIT only.
+        // 3) Take BOTH row locks (fixed id order — no deadlock across
+        //    opposite-direction transfers). The critical section starts here:
+        //    everything that committed before these locks is visible to the
+        //    statement that follows (fresh snapshot), so the version gate and
+        //    the per-stream seq MAX below both see the latest committed state.
+        await c.query(
+          `SELECT id FROM accounts WHERE id IN ($1, $2) ORDER BY id FOR UPDATE`,
+          [input.from, input.to],
+        );
+
+        // 4) THE whole transfer in ONE atomic statement: both version-
+        //    conditioned UPDATEs (the OCC gate — a version that moved between
+        //    the read and the lock ⇒ 0 rows ⇒ conflict, retried by the caller),
+        //    the transfer row, the outbox row and both event appends. The rows
+        //    are already locked, so nothing inside this statement can wait.
         const fromStream = `account:${input.from}`;
         const toStream = `account:${input.to}`;
         const ins = await c.query<{ id: string }>(
-          `WITH f AS (
-             UPDATE accounts SET balance = balance - $1, version = version + 1
-             WHERE id = $2 AND balance >= $1
-             RETURNING id
-           ),
-           t AS (
-             UPDATE accounts SET balance = balance + $1, version = version + 1
-             WHERE id = $3
+          `WITH up AS (
+             UPDATE accounts
+             SET balance = balance + CASE WHEN id = $4 THEN $1 ELSE -$1 END,
+                 version = version + 1
+             WHERE id IN ($2, $4)
+               AND EXISTS (
+                 SELECT 1 FROM accounts af, accounts ab
+                 WHERE af.id = $2 AND ab.id = $4
+                   AND af.version = $3 AND ab.version = $5
+                   AND af.balance >= $1
+               )
              RETURNING id
            ),
            tr AS (
              INSERT INTO transfers (from_id, to_id, amount, idempotency_key, status)
-             SELECT $2, $3, $1, $4, 'committed' FROM f, t
+             SELECT $2, $4, $1, $6, 'committed' FROM up WHERE up.id = $2
              RETURNING id
            ),
            ob AS (
              INSERT INTO outbox (topic, payload)
              SELECT 'transfer.committed',
-                    json_build_object('transferId', tr.id, 'from', $2, 'to', $3, 'amount', $1)::text
+                    json_build_object('transferId', tr.id, 'from', $2, 'to', $4, 'amount', $1)::text
              FROM tr
              RETURNING outbox.id
            ),
            ev AS (
              SELECT s.stream, COALESCE(MAX(e.seq), 0) + 1 AS next
-             FROM (VALUES ($5), ($6)) AS s(stream)
+             FROM (VALUES ($7), ($8)) AS s(stream)
              LEFT JOIN event_log e ON e.stream = s.stream
              GROUP BY s.stream
            ),
            evins AS (
              INSERT INTO event_log (stream, seq, type, payload)
              SELECT e.stream, e.next,
-                    CASE WHEN e.stream = $5 THEN 'debited' ELSE 'credited' END,
+                    CASE WHEN e.stream = $7 THEN 'debited' ELSE 'credited' END,
                     json_build_object('transferId', tr.id, 'amount', $1)::text
              FROM ev e, tr
              RETURNING id
            )
            SELECT tr.id FROM tr, ob, evins`,
-          [input.amount, input.from, input.to, input.idempotencyKey, fromStream, toStream],
+          [input.amount, input.from, Number(from.version), input.to, Number(to.version),
+            input.idempotencyKey, fromStream, toStream],
         );
         if ((ins.rowCount ?? 0) === 0) return { ok: false, code: 'conflict' as const };
         const transferId = Number(ins.rows[0]!.id);

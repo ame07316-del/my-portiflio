@@ -59,7 +59,7 @@ jobs:
           await c.query(`INSERT INTO accounts (id, balance, version) VALUES ('a', 1000000000000, 0), ('b', 0, 0) ON CONFLICT (tenant, id) DO NOTHING`);
           await c.query('COMMIT');
           let k = 0;
-          const ONE = `WITH f AS (UPDATE accounts SET balance = balance - $1, version = version + 1 WHERE id = $2 AND balance >= $1 RETURNING id), t AS (UPDATE accounts SET balance = balance + $1, version = version + 1 WHERE id = $3 RETURNING id), tr AS (INSERT INTO transfers (from_id, to_id, amount, idempotency_key, status) SELECT $2, $3, $1, $4, 'committed' FROM f, t RETURNING id), ob AS (INSERT INTO outbox (topic, payload) SELECT 'transfer.committed', json_build_object('transferId', tr.id, 'from', $2, 'to', $3, 'amount', $1)::text FROM tr RETURNING outbox.id), ev AS (SELECT s.stream, COALESCE(MAX(e.seq), 0) + 1 AS next FROM (VALUES ($5), ($6)) AS s(stream) LEFT JOIN event_log e ON e.stream = s.stream GROUP BY s.stream), evins AS (INSERT INTO event_log (stream, seq, type, payload) SELECT e.stream, e.next, CASE WHEN e.stream = $5 THEN 'debited' ELSE 'credited' END, json_build_object('transferId', tr.id, 'amount', $1)::text FROM ev e, tr RETURNING id) SELECT tr.id FROM tr, ob, evins`;
+          const ONE = `WITH up AS (UPDATE accounts SET balance = balance + CASE WHEN id = $4 THEN $1 ELSE -$1 END, version = version + 1 WHERE id IN ($2, $4) AND EXISTS (SELECT 1 FROM accounts af, accounts ab WHERE af.id = $2 AND ab.id = $4 AND af.version = $3 AND ab.version = $5 AND af.balance >= $1) RETURNING id), tr AS (INSERT INTO transfers (from_id, to_id, amount, idempotency_key, status) SELECT $2, $4, $1, $6, 'committed' FROM up WHERE up.id = $2 RETURNING id), ob AS (INSERT INTO outbox (topic, payload) SELECT 'transfer.committed', json_build_object('transferId', tr.id, 'from', $2, 'to', $4, 'amount', $1)::text FROM tr RETURNING outbox.id), ev AS (SELECT s.stream, COALESCE(MAX(e.seq), 0) + 1 AS next FROM (VALUES ($7), ($8)) AS s(stream) LEFT JOIN event_log e ON e.stream = s.stream GROUP BY s.stream), evins AS (INSERT INTO event_log (stream, seq, type, payload) SELECT e.stream, e.next, CASE WHEN e.stream = $7 THEN 'debited' ELSE 'credited' END, json_build_object('transferId', tr.id, 'amount', $1)::text FROM ev e, tr RETURNING id) SELECT tr.id FROM tr, ob, evins`;
           async function one(client) {
             await client.query('BEGIN');
             await client.query(`SELECT set_config('role','sovereign_app', true)`);
@@ -67,7 +67,8 @@ jobs:
             try {
               const read = await client.query(`SELECT id, balance, version FROM accounts WHERE id IN ('a','b') ORDER BY id`);
               const f = read.rows[0], t = read.rows[1];
-              const ins = await client.query(ONE, [1, 'a', 'b', 'tune-' + (k++), 'account:a', 'account:b']);
+              await client.query(`SELECT id FROM accounts WHERE id IN ('a','b') ORDER BY id FOR UPDATE`);
+              const ins = await client.query(ONE, [1, 'a', Number(f.version), 'b', Number(t.version), 'tune-' + (k++), 'account:a', 'account:b']);
               if ((ins.rowCount ?? 0) === 0) throw new Error('conflict');
               await client.query('COMMIT');
             } catch (e) { await client.query('ROLLBACK'); throw e; }
@@ -98,7 +99,8 @@ jobs:
                       await cl.query(`SELECT set_config('app.tenant', $1, true)`, ['tune']);
                       const read = await cl.query(`SELECT id, balance, version FROM accounts WHERE id IN ('a','b') ORDER BY id`);
                       const f = read.rows[0], t = read.rows[1];
-                      const ins = await cl.query(ONE, [1, 'a', 'b', 'cc-' + poolMax + '-' + workers + '-' + wid + '-' + (i++) + '-' + Math.random().toString(36).slice(2), 'account:a', 'account:b']);
+                      await cl.query(`SELECT id FROM accounts WHERE id IN ('a','b') ORDER BY id FOR UPDATE`);
+                      const ins = await cl.query(ONE, [1, 'a', Number(f.version), 'b', Number(t.version), 'cc-' + poolMax + '-' + workers + '-' + wid + '-' + (i++) + '-' + Math.random().toString(36).slice(2), 'account:a', 'account:b']);
                       if ((ins.rowCount ?? 0) === 0) throw new Error('conflict');
                       await cl.query('COMMIT');
                     } catch (e) { await cl.query('ROLLBACK').catch(() => {}); throw e; }
