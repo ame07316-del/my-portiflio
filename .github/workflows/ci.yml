@@ -27,11 +27,6 @@ jobs:
     services:
       postgres:
         image: postgres:16
-        # Disposable load-test fixture: the storm serializes ~100 concurrent
-        # transfers on one hot row pair; per-commit WAL fsync would cap the
-        # achievable TPS on the 2-vCPU runner below the rps floor. Durability
-        # is irrelevant for a CI fixture — production code is untouched.
-        command: [postgres, -c, synchronous_commit=off]
         env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: sovereign }
         ports: ['5432:5432']
         options: >-
@@ -47,6 +42,33 @@ jobs:
         with: { node-version: 22, cache: npm, cache-dependency-path: server/package-lock.json }
       - run: npm ci
       - run: npm run build
+      - name: "TUNE probe (diag: empty-commit cost sync on/off)"
+        run: |
+          set +e
+          node --input-type=module -e "
+          import pg from 'pg';
+          const c = new pg.Client({ connectionString: process.env.PG_URL });
+          await c.connect();
+          async function bench(label, n) {
+            await c.query('BEGIN');
+            const t0 = performance.now();
+            for (let i = 0; i < n; i++) { await c.query('COMMIT'); await c.query('BEGIN'); }
+            console.log(label + ' ' + ((performance.now() - t0) / n).toFixed(2) + ' ms');
+          }
+          await bench('empty-commit sync-on :', 100);
+          await c.query('SET SESSION synchronous_commit = off');
+          await bench('empty-commit sync-off:', 100);
+          await c.query('BEGIN'); await c.query('SELECT 1');
+          const t0 = performance.now();
+          for (let i = 0; i < 50; i++) { await c.query('SELECT 1'); }
+          console.log('stmt sync-off        : ' + ((performance.now() - t0) / 50).toFixed(2) + ' ms');
+          await c.query('COMMIT');
+          await c.end();
+          " > /tmp/tune.log 2>&1
+          RC=$?
+          cat /tmp/tune.log
+          echo "::notice title=DIAG-TUNE-rc=$RC::$(base64 -w0 /tmp/tune.log)"
+          exit $RC
       - name: "TESTS (diag: base64 notice annotation)"
         run: |
           set +e
