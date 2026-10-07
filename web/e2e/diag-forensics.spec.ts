@@ -13,28 +13,63 @@ test('diag: boot forensics', async ({ page }) => {
   page.on('crash', () => push('[page crashed]'));
 
   await page.goto('/index.html');
-  await page.waitForTimeout(6000);
+  await page.waitForTimeout(5000);
 
   const info = await page.evaluate(async () => {
     const out: Record<string, unknown> = {};
     out.sab = typeof SharedArrayBuffer;
-    out.sharedWorkerCtor = typeof SharedWorker;
     out.coi = Boolean(window.crossOriginIsolated);
     out.pill = document.querySelector('[data-status-pill]')?.textContent ?? 'n/a';
     out.workerMode = document.querySelector('[data-worker-mode]')?.textContent ?? 'n/a';
     try { out.fetchWorkerScript = (await fetch('./dist/worker/state-worker.js')).status; } catch (e) { out.fetchWorkerScript = String(e); }
     try { out.fetchWasm = (await fetch('./dist/core.wasm')).status; } catch (e) { out.fetchWasm = String(e); }
-    try {
-      const sw = new SharedWorker('./dist/worker/state-worker.js', { type: 'module', name: `diag-${Date.now()}` });
-      const err = await new Promise<string | null>((res) => {
-        const t = setTimeout(() => res(null), 4000);
-        sw.onerror = (e) => { res(e.message || e.type || 'worker-error'); clearTimeout(t); };
-      });
-      out.swSecondInstance = err === null ? 'no-error-in-4s' : err;
-    } catch (e) {
-      out.swSecondInstance = `ctor-threw: ${String(e)}`;
-    }
     return out;
+  });
+
+  // --- direct port probe 1: trivial inline echo SharedWorker ---
+  info.trivialSw = await page.evaluate(async () => {
+    try {
+      const code = `self.onconnect = (ev) => { const p = ev.ports[0]; p.onmessage = (e) => p.postMessage('pong:' + (e.data && e.data.bin ? e.data.bin.byteLength : String(e.data))); };`;
+      const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+      const sw = new SharedWorker(url, { name: 'trivial-' + Date.now() });
+      const port = sw.port;
+      return await new Promise<string>((resolve) => {
+        const t = setTimeout(() => resolve('timeout-no-reply-in-4s'), 4000);
+        sw.onerror = (e) => { clearTimeout(t); resolve('sw-error: ' + (e.message || e.type || 'err')); };
+        port.onmessage = (ev) => { clearTimeout(t); resolve('reply: ' + JSON.stringify(ev.data)); };
+        port.start();
+        port.postMessage({ bin: new ArrayBuffer(16) });
+      });
+    } catch (e) { return 'ctor-threw: ' + String(e); }
+  });
+
+  // --- direct port probe 2: OUR worker script, raw Hello frame ---
+  info.ourSwDirect = await page.evaluate(async () => {
+    try {
+      const sw = new SharedWorker('./dist/worker/state-worker.js', { type: 'module', name: 'direct-' + Date.now() });
+      const port = sw.port;
+      const protoUrl = new URL('./dist/core/protocol.js', location.href).href;
+      const proto = (await import(protoUrl)) as unknown as {
+        BinWriter: new (n: number) => { u32(n: number): unknown; finish(): Uint8Array };
+        beginFrame(w: unknown, tag: number, seq: number): { u32(n: number): unknown };
+        Tag: { Hello: number };
+      };
+      const w = new proto.BinWriter(16);
+      proto.beginFrame(w, proto.Tag.Hello, 1).u32(0);
+      const frame = w.finish();
+      return await new Promise<string>((resolve) => {
+        const t = setTimeout(() => resolve('timeout-no-reply-in-4s'), 4000);
+        sw.onerror = (e) => { clearTimeout(t); resolve('sw-error: ' + (e.message || e.type || 'err')); };
+        port.onmessage = (ev) => {
+          const d = ev.data as { bin?: ArrayBuffer };
+          const bin = d && d.bin ? d.bin : null;
+          clearTimeout(t);
+          resolve(bin ? `reply len=${bin.byteLength}` : 'reply non-bin: ' + JSON.stringify(ev.data));
+        };
+        port.start();
+        port.postMessage({ bin: frame.buffer }, [frame.buffer]);
+      });
+    } catch (e) { return 'ctor-threw: ' + String(e); }
   });
 
   const b64 = Buffer.from(JSON.stringify({ info, logs })).toString('base64');
