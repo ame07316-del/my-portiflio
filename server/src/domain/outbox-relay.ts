@@ -17,6 +17,7 @@ export type OutboxConsumer = (row: OutboxRow) => Promise<void> | void;
 
 export class OutboxRelay {
   readonly #consumers: OutboxConsumer[] = [];
+  #inflight: Promise<number> | null = null;
 
   constructor(
     private readonly store: LedgerStore,
@@ -32,20 +33,38 @@ export class OutboxRelay {
   }
 
   /**
-   * Deliver pending rows in id order and mark them sent. A consumer failure
-   * stops the batch WITHOUT marking — the row stays pending (at-least-once).
+   * Deliver pending rows in id order and mark them sent (one batched mark
+   * per batch). A consumer failure stops the batch WITHOUT marking the
+   * failed row or any later one — they stay pending (at-least-once).
+   * Single-flight: concurrent callers share the one in-flight drain, so a
+   * burst of callers never multiplies the downstream work (hot-row storms).
    * Returns the number of rows delivered. @complexity O(rows).
    */
-  async drain(): Promise<number> {
+  drain(): Promise<number> {
+    if (this.#inflight !== null) return this.#inflight;
+    this.#inflight = this.#drainInner().finally(() => { this.#inflight = null; });
+    return this.#inflight;
+  }
+
+  async #drainInner(): Promise<number> {
     let delivered = 0;
     for (;;) {
       const rows = await this.store.outboxPending(this.batchSize);
       if (rows.length === 0) break;
-      for (const row of rows) {
-        for (const c of this.#consumers) await c(row);
-        await this.store.outboxMarkSent([row.id]);
-        delivered++;
+      const sent: number[] = [];
+      try {
+        for (const row of rows) {
+          for (const c of this.#consumers) await c(row);
+          sent.push(row.id);
+        }
+      } catch (e) {
+        // Mark only what was actually delivered; the failed row (and the
+        // rest of the batch) stay pending for the next drain.
+        if (sent.length > 0) await this.store.outboxMarkSent(sent).catch(() => {});
+        throw e;
       }
+      await this.store.outboxMarkSent(sent);
+      delivered += sent.length;
       if (rows.length < this.batchSize) break;
     }
     return delivered;
