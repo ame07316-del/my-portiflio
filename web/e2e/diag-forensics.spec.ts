@@ -43,7 +43,8 @@ test('diag: boot forensics', async ({ page }) => {
     } catch (e) { return 'ctor-threw: ' + String(e); }
   });
 
-  // --- direct port probe 2: OUR worker script, raw Hello frame ---
+  // --- direct port probe 2: OUR worker script, raw Hello frame;
+  //     also listen on sw.onmessage (dedicated-path miswire detector) ---
   info.ourSwDirect = await page.evaluate(async () => {
     try {
       const sw = new SharedWorker('./dist/worker/state-worker.js', { type: 'module', name: 'direct-' + Date.now() });
@@ -58,18 +59,35 @@ test('diag: boot forensics', async ({ page }) => {
       proto.beginFrame(w, proto.Tag.Hello, 1).u32(0);
       const frame = w.finish();
       return await new Promise<string>((resolve) => {
-        const t = setTimeout(() => resolve('timeout-no-reply-in-4s'), 4000);
-        sw.onerror = (e) => { clearTimeout(t); resolve('sw-error: ' + (e.message || e.type || 'err')); };
+        let done = false;
+        const finish = (s: string) => { if (!done) { done = true; clearTimeout(t); resolve(s); } };
+        const t = setTimeout(() => finish('timeout-no-reply-in-8s'), 8000);
+        sw.onerror = (e) => finish('sw-error: ' + (e.message || e.type || 'err'));
+        sw.onmessage = (ev) => finish('via-sw-onmessage (dedicated-path miswire!): ' + JSON.stringify(ev.data)?.slice(0, 120));
         port.onmessage = (ev) => {
           const d = ev.data as { bin?: ArrayBuffer };
           const bin = d && d.bin ? d.bin : null;
-          clearTimeout(t);
-          resolve(bin ? `reply len=${bin.byteLength}` : 'reply non-bin: ' + JSON.stringify(ev.data));
+          finish(bin ? `reply len=${bin.byteLength}` : 'reply non-bin: ' + JSON.stringify(ev.data));
         };
         port.start();
         port.postMessage({ bin: frame.buffer }, [frame.buffer]);
       });
     } catch (e) { return 'ctor-threw: ' + String(e); }
+  });
+
+  // --- probe 3: import the worker module graph at PAGE level (browser env) ---
+  info.pageLevelImport = await page.evaluate(async () => {
+    const url = new URL('./dist/worker/state-worker.js', location.href).href;
+    const t = setTimeout(() => { /* keep going */ }, 0);
+    try {
+      await Promise.race([
+        import(url),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('import-hung-6s')), 6000)),
+      ]);
+      return 'import-ok';
+    } catch (e) {
+      return 'import-failed: ' + String(e).slice(0, 160);
+    } finally { clearTimeout(t); }
   });
 
   const b64 = Buffer.from(JSON.stringify({ info, logs })).toString('base64');
