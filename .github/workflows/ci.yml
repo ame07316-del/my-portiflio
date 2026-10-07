@@ -45,7 +45,7 @@ jobs:
       - name: "TUNE probe (diag: hot-row cost + concurrent throughput)"
         run: |
           set +e
-          cat > /tmp/probe.mjs <<'EOF'
+          cat > ./probe-tmp.mjs <<'EOF'
           import pg from 'pg';
           import { splitSchemaStatements } from './dist/server/src/adapters/pg-store.js';
           import { SCHEMA_SQL } from './dist/server/src/adapters/pglite-store.js';
@@ -126,9 +126,10 @@ jobs:
           await c2.query("DELETE FROM accounts WHERE tenant = 'tune'");
           await c2.end();
           EOF
-          node /tmp/probe.mjs > /tmp/tune.log 2>&1
+          node ./probe-tmp.mjs > /tmp/tune.log 2>&1
           RC=$?
           cat /tmp/tune.log
+          rm -f ./probe-tmp.mjs
           echo "::notice title=DIAG-TUNE-rc=$RC::$(base64 -w0 /tmp/tune.log)"
           exit $RC
 
