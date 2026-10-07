@@ -1,0 +1,19 @@
+{
+  "name": "portfolio-sovereign-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Anti-fragile backend: UDP gateway with O(1) load shedding, OCC ledger with outbox + idempotency keys, ABAC+RLS zero-trust security, envelope encryption, zero-overhead observability. Runtime deps: none.",
+  "scripts": {
+    "build:wasm": "node ../web/tools/wasm-assemble.mjs && mkdir -p dist && cp ../web/dist/core.wasm dist/core.wasm",
+    "build:ts": "tsc -p tsconfig.json",
+    "build": "npm run build:wasm && npm run build:ts",
+    "test": "npm run build && node --test dist/server/src/tests/*.test.js",
+    "start": "npm run build && node dist/server/src/control-plane.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^20.0.0",
+    "@electric-sql/pglite": "^0.5.8"
+  }
+}

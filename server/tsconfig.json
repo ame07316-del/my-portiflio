@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "rootDir": "..",
+    "outDir": "dist",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "../web/src/core/bounds.ts",
+    "../web/src/core/validate.ts",
+    "../web/src/core/lru.ts",
+    "../web/src/core/ring.ts",
+    "../web/src/core/crdt.ts",
+    "../web/src/core/protocol.ts",
+    "../web/src/core/storage.ts",
+    "../web/src/runtime/wasm-core.ts"
+  ]
+}

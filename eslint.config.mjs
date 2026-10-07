@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The rebuilt Edge UI is linted by its own strict tsconfig (web/tsconfig.json).
+    "web/**",
   ]),
 ]);
 
