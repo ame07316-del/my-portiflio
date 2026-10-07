@@ -80,10 +80,47 @@ jobs:
           await batch('fresh       :', 200);
           await batch('after 400   :', 200);
           await batch('after 1200  :', 200);
-          await batch('after 2400  :', 200);
-          await batch('after 3600  :', 200);
-          await c.query('VACUUM accounts, event_log');
-          await batch('post-vacuum :', 200);
+          await c.end();
+          // ---- concurrent throughput probe (real CTE, production-like pool) ----
+          for (const poolMax of [5, 20]) {
+            const pool = new pg.Pool({ connectionString: process.env.PG_URL, max: poolMax });
+            for (const workers of [5, 50, 100]) {
+              const N = workers, durMs = 3000;
+              const stopAt = Date.now() + durMs;
+              let done = 0, errs = 0;
+              const durs = [];
+              const key = (i) => `cc-${poolMax}-${workers}-${Date.now()}-${i}-${Math.random().toString(36).slice(2)}`;
+              const worker = async (wid) => {
+                let i = 0;
+                while (Date.now() < stopAt) {
+                  const t0 = performance.now();
+                  try {
+                    const cl = await pool.connect();
+                    try {
+                      await cl.query('BEGIN');
+                      await cl.query(\`SELECT set_config('role','sovereign_app', true)\`);
+                      await cl.query(\`SELECT set_config('app.tenant', \$1, true)\`, ['tune']);
+                      const read = await cl.query(\`SELECT id, balance, version FROM accounts WHERE id IN ('a','b') ORDER BY id\`);
+                      const f = read.rows[0], t = read.rows[1];
+                      const ins = await cl.query(ONE, [1, 'a', Number(f.version), 'b', Number(t.version), key(i++), 'account:a', 'account:b']);
+                      if ((ins.rowCount ?? 0) === 0) throw new Error('conflict');
+                      await cl.query('COMMIT');
+                    } catch (e) { await cl.query('ROLLBACK').catch(() => {}); throw e; }
+                    finally { cl.release(); }
+                  } catch { errs++; }
+                  const d = performance.now() - t0;
+                  if (durs.length < 200000) durs.push(d);
+                  done++;
+                }
+              };
+              await Promise.all(Array.from({ length: N }, (_, w) => worker(w)));
+              const secs = durMs / 1000;
+              const sorted = durs.slice().sort((a, b) => a - b);
+              const p = (q) => sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((q / 100) * sorted.length))] : 0;
+              console.log(\`pool=\${poolMax} workers=\${N}: \${(done / secs).toFixed(0)} rps · errs \${errs} · p50 \${p(50).toFixed(0)}ms · p99 \${p(99).toFixed(0)}ms\`);
+            }
+            await pool.end();
+          }
           // cleanup — leave the fixture pristine for the test suite
           await c.query('DELETE FROM outbox');
           await c.query(\`DELETE FROM event_log WHERE stream LIKE 'account:%'\`);
