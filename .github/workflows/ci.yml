@@ -44,14 +44,17 @@ jobs:
       - run: npm run build
       - name: "TESTS (diag: base64 notice annotation)"
         run: |
-          echo "::notice title=DIAG-ALIVE::probe ok"
-          node --test dist/server/src/tests/*.test.js > /tmp/t.log 2>&1; RC=$?
+          set +e
+          node --test dist/server/src/tests/*.test.js > /tmp/t.log 2>&1
+          RC=$?
           tail -c 3000 /tmp/t.log
-          base64 -w0 /tmp/t.log | tail -c 20000 > /tmp/t.b64
-          echo "::notice title=DIAG-SERVER-TESTS-rc=$RC::$(cat /tmp/t.b64)"
+          B64=$(base64 -w0 /tmp/t.log)
+          if [ ${#B64} -gt 60000 ]; then B64=${B64: -60000}; fi
+          echo "::notice title=DIAG-SERVER-TESTS-rc=$RC::${B64}"
           exit $RC
       - name: "Load storm (diag: base64 notice annotation)"
         run: |
+          set +e
           SEED_DEMO=1 HTTP_PORT=8081 node dist/server/src/control-plane.js > /tmp/cp.log 2>&1 &
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:8081/healthz > /dev/null && break
