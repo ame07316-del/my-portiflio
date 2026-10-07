@@ -47,8 +47,12 @@ jobs:
           set +e
           node --input-type=module -e "
           import pg from 'pg';
+          import { splitSchemaStatements } from './dist/server/src/adapters/pg-store.js';
+          import { SCHEMA_SQL } from './dist/server/src/adapters/pglite-store.js';
           const c = new pg.Client({ connectionString: process.env.PG_URL });
           await c.connect();
+          for (const s of splitSchemaStatements(SCHEMA_SQL)) await c.query(s);
+          console.log('schema: ' + splitSchemaStatements(SCHEMA_SQL).length + ' statements ok');
           await c.query('BEGIN');
           await c.query(\`SELECT set_config('role','sovereign_app', true)\`);
           await c.query(\`SELECT set_config('app.tenant', \$1, true)\`, ['tune']);
