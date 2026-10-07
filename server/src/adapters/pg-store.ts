@@ -95,22 +95,76 @@ export class PgStore implements LedgerStore {
   async attemptTransfer(input: TransferInput): Promise<TransferResult> {
     try {
       return await this.#scopedTx(input.tenant, async (c) => {
-        const dup = await c.query<{ id: string }>(`SELECT id FROM transfers WHERE idempotency_key = $1`, [input.idempotencyKey]);
-        if (dup.rows[0] !== undefined) return { ok: true, transferId: Number(dup.rows[0].id), replayed: true };
-        const fromRes = await c.query<{ balance: string; version: string }>(`SELECT balance, version FROM accounts WHERE id = $1`, [input.from]);
-        const toRes = await c.query<{ version: string }>(`SELECT version FROM accounts WHERE id = $1`, [input.to]);
-        const from = fromRes.rows[0]; const to = toRes.rows[0];
+        // 1) Idempotency gate — a replay returns the ORIGINAL result.
+        const dup = await c.query<{ id: string }>(
+          `SELECT id FROM transfers WHERE idempotency_key = $1`,
+          [input.idempotencyKey],
+        );
+        const dupRow = dup.rows[0];
+        if (dupRow !== undefined) return { ok: true, transferId: Number(dupRow.id), replayed: true };
+
+        // 2) Read both rows in ONE round trip (RLS already scopes them).
+        const read = await c.query<{ id: string; balance: string; version: string }>(
+          `SELECT id, balance, version FROM accounts WHERE id IN ($1, $2)`,
+          [input.from, input.to],
+        );
+        const from = read.rows.find((r) => r.id === input.from);
+        const to = read.rows.find((r) => r.id === input.to);
         if (from === undefined || to === undefined) return { ok: false, code: 'not_found' as const };
         if (Number(from.balance) < input.amount) return { ok: false, code: 'insufficient_funds' as const };
-        const debit = await c.query(`UPDATE accounts SET balance = balance - $1, version = version + 1 WHERE id = $2 AND version = $3`, [input.amount, input.from, Number(from.version)]);
-        if ((debit.rowCount ?? 0) === 0) return { ok: false, code: 'conflict' as const };
-        const credit = await c.query(`UPDATE accounts SET balance = balance + $1, version = version + 1 WHERE id = $2 AND version = $3`, [input.amount, input.to, Number(to.version)]);
-        if ((credit.rowCount ?? 0) === 0) return { ok: false, code: 'conflict' as const };
-        const ins = await c.query<{ id: string }>(`INSERT INTO transfers (from_id, to_id, amount, idempotency_key, status) VALUES ($1, $2, $3, $4, 'committed') RETURNING id`, [input.from, input.to, input.amount, input.idempotencyKey]);
+
+        // 3) THE whole transfer in ONE atomic statement: both version-
+        //    conditioned UPDATEs (the OCC gate — 0 rows ⇒ conflict), the
+        //    transfer row, the outbox row and both event appends. Both row
+        //    locks are taken in a single round trip, so the critical section
+        //    (lock → COMMIT) is just this statement + COMMIT — the only way
+        //    a hot row pair sustains the load storm's rps floor.
+        const fromStream = `account:${input.from}`;
+        const toStream = `account:${input.to}`;
+        const ins = await c.query<{ id: string }>(
+          `WITH f AS (
+             UPDATE accounts SET balance = balance - $1, version = version + 1
+             WHERE id = $2 AND version = $3 AND balance >= $1
+             RETURNING id
+           ),
+           t AS (
+             UPDATE accounts SET balance = balance + $1, version = version + 1
+             WHERE id = $4 AND version = $5
+             RETURNING id
+           ),
+           tr AS (
+             INSERT INTO transfers (from_id, to_id, amount, idempotency_key, status)
+             SELECT $2, $4, $1, $6, 'committed' FROM f, t
+             RETURNING id
+           ),
+           ob AS (
+             INSERT INTO outbox (topic, payload)
+             SELECT 'transfer.committed',
+                    json_build_object('transferId', tr.id, 'from', $2, 'to', $4, 'amount', $1)::text
+             FROM tr
+             RETURNING outbox.id
+           ),
+           ev AS (
+             SELECT s.stream, COALESCE(MAX(e.seq), 0) + 1 AS next
+             FROM (VALUES ($7), ($8)) AS s(stream)
+             LEFT JOIN event_log e ON e.stream = s.stream
+             GROUP BY s.stream
+           ),
+           evins AS (
+             INSERT INTO event_log (stream, seq, type, payload)
+             SELECT e.stream, e.next,
+                    CASE WHEN e.stream = $7 THEN 'debited' ELSE 'credited' END,
+                    json_build_object('transferId', tr.id, 'amount', $1)::text
+             FROM ev e, tr
+             RETURNING id
+           )
+           SELECT tr.id FROM tr, ob, evins`,
+          [input.amount, input.from, Number(from.version), input.to, Number(to.version),
+            input.idempotencyKey, fromStream, toStream],
+        );
+        if ((ins.rowCount ?? 0) === 0) return { ok: false, code: 'conflict' as const };
         const transferId = Number(ins.rows[0]!.id);
-        await c.query(`INSERT INTO outbox (topic, payload) VALUES ($1, $2)`, ['transfer.committed', JSON.stringify({ transferId, from: input.from, to: input.to, amount: input.amount })]);
-        await this.#appendEvent(c, `account:${input.from}`, 'debited', { transferId, amount: input.amount });
-        await this.#appendEvent(c, `account:${input.to}`, 'credited', { transferId, amount: input.amount });
+
         return { ok: true, transferId, replayed: false };
       });
     } catch (e) {
@@ -127,10 +181,6 @@ export class PgStore implements LedgerStore {
       if (r === undefined) return { ok: false, code: 'conflict' as const };
       return { ok: true, transferId: Number(r.id), replayed: true };
     });
-  }
-  async #appendEvent(c: TxClient, stream: string, type: string, payload: unknown): Promise<void> {
-    const res = await c.query<{ next: string }>(`SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM event_log WHERE stream = $1`, [stream]);
-    await c.query(`INSERT INTO event_log (stream, seq, type, payload) VALUES ($1, $2, $3, $4)`, [stream, Number(res.rows[0]!.next), type, JSON.stringify(payload)]);
   }
   async outboxPending(limit: number): Promise<OutboxRow[]> {
     const res = await this.#pool.query<{ id: string; topic: string; payload: string }>(`SELECT id, topic, payload FROM outbox WHERE sent_at IS NULL ORDER BY id LIMIT $1`, [limit]);
