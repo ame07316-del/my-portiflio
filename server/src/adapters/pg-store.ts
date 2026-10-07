@@ -103,10 +103,14 @@ export class PgStore implements LedgerStore {
         const dupRow = dup.rows[0];
         if (dupRow !== undefined) return { ok: true, transferId: Number(dupRow.id), replayed: true };
 
-        // 2) Read both rows in ONE round trip (RLS already scopes them) —
-        //    fast reject of not_found / insufficient WITHOUT taking a lock.
+        // 2) LOCK + AUTHORITATIVE READ in one round trip (fixed id order —
+        //    no deadlock across opposite-direction transfers). FOR UPDATE
+        //    re-checks the row under the lock (EvalPlanQual), so the returned
+        //    versions are the latest committed state as of the moment both
+        //    locks are held — the OCC gate below then compares against state
+        //    that cannot move while we hold the locks.
         const read = await c.query<{ id: string; balance: string; version: string }>(
-          `SELECT id, balance, version FROM accounts WHERE id IN ($1, $2)`,
+          `SELECT id, balance, version FROM accounts WHERE id IN ($1, $2) ORDER BY id FOR UPDATE`,
           [input.from, input.to],
         );
         const from = read.rows.find((r) => r.id === input.from);
@@ -114,21 +118,11 @@ export class PgStore implements LedgerStore {
         if (from === undefined || to === undefined) return { ok: false, code: 'not_found' as const };
         if (Number(from.balance) < input.amount) return { ok: false, code: 'insufficient_funds' as const };
 
-        // 3) Take BOTH row locks (fixed id order — no deadlock across
-        //    opposite-direction transfers). The critical section starts here:
-        //    everything that committed before these locks is visible to the
-        //    statement that follows (fresh snapshot), so the version gate and
-        //    the per-stream seq MAX below both see the latest committed state.
-        await c.query(
-          `SELECT id FROM accounts WHERE id IN ($1, $2) ORDER BY id FOR UPDATE`,
-          [input.from, input.to],
-        );
-
-        // 4) THE whole transfer in ONE atomic statement: both version-
-        //    conditioned UPDATEs (the OCC gate — a version that moved between
-        //    the read and the lock ⇒ 0 rows ⇒ conflict, retried by the caller),
-        //    the transfer row, the outbox row and both event appends. The rows
-        //    are already locked, so nothing inside this statement can wait.
+        // 3) THE whole transfer in ONE atomic statement: a single joint-
+        //    gated UPDATE across both rows (0 rows ⇒ conflict, retried by
+        //    the caller — only a genuine concurrent state change can cause
+        //    it now, never queue position), then the transfer row, the outbox
+        //    row and both event appends. Everything runs under the locks.
         const fromStream = `account:${input.from}`;
         const toStream = `account:${input.to}`;
         const ins = await c.query<{ id: string }>(

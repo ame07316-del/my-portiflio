@@ -65,9 +65,8 @@ jobs:
             await client.query(`SELECT set_config('role','sovereign_app', true)`);
             await client.query(`SELECT set_config('app.tenant', $1, true)`, ['tune']);
             try {
-              const read = await client.query(`SELECT id, balance, version FROM accounts WHERE id IN ('a','b') ORDER BY id`);
+              const read = await client.query(`SELECT id, balance, version FROM accounts WHERE id IN ('a','b') ORDER BY id FOR UPDATE`);
               const f = read.rows[0], t = read.rows[1];
-              await client.query(`SELECT id FROM accounts WHERE id IN ('a','b') ORDER BY id FOR UPDATE`);
               const ins = await client.query(ONE, [1, 'a', Number(f.version), 'b', Number(t.version), 'tune-' + (k++), 'account:a', 'account:b']);
               if ((ins.rowCount ?? 0) === 0) throw new Error('conflict');
               await client.query('COMMIT');
@@ -97,9 +96,8 @@ jobs:
                       await cl.query('BEGIN');
                       await cl.query(`SELECT set_config('role','sovereign_app', true)`);
                       await cl.query(`SELECT set_config('app.tenant', $1, true)`, ['tune']);
-                      const read = await cl.query(`SELECT id, balance, version FROM accounts WHERE id IN ('a','b') ORDER BY id`);
+                      const read = await cl.query(`SELECT id, balance, version FROM accounts WHERE id IN ('a','b') ORDER BY id FOR UPDATE`);
                       const f = read.rows[0], t = read.rows[1];
-                      await cl.query(`SELECT id FROM accounts WHERE id IN ('a','b') ORDER BY id FOR UPDATE`);
                       const ins = await cl.query(ONE, [1, 'a', Number(f.version), 'b', Number(t.version), 'cc-' + poolMax + '-' + workers + '-' + wid + '-' + (i++) + '-' + Math.random().toString(36).slice(2), 'account:a', 'account:b']);
                       if ((ins.rowCount ?? 0) === 0) throw new Error('conflict');
                       await cl.query('COMMIT');
