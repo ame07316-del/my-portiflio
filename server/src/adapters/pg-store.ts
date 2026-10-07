@@ -44,10 +44,18 @@ export class PgStore implements LedgerStore {
       if (sslmode === 'disable') throw new Error('refusing plaintext connection to a remote host');
       if (sslmode === 'no-verify') throw new Error('sslmode=no-verify is rejected (hostname must verify)');
     }
+    // Local endpoints (dev/CI service containers) speak plaintext unless
+    // explicitly asked for SSL (libpq 'require' = encrypt, no cert check);
+    // remote endpoints always verify the full chain.
+    const ssl = isLocal
+      ? sslmode === 'require'
+        ? { rejectUnauthorized: false }
+        : undefined
+      : { rejectUnauthorized: true };
     this.#pool = new pg.Pool({
       connectionString: url,
       max: Math.max(1, Math.min(20, poolMax)),
-      ssl: isLocal && sslmode === 'disable' ? undefined : { rejectUnauthorized: true },
+      ssl,
       idleTimeoutMillis: 10_000,
     });
   }
