@@ -42,140 +42,16 @@ jobs:
         with: { node-version: 22, cache: npm, cache-dependency-path: server/package-lock.json }
       - run: npm ci
       - run: npm run build
-      - name: "TUNE probe (diag: hot-row cost + concurrent throughput)"
+      - run: node --test dist/server/src/tests/*.test.js
+      - name: Load storm (embedded engine)
         run: |
-          set +e
-          cat > ./probe-tmp.mjs <<'EOF'
-          import pg from 'pg';
-          import { splitSchemaStatements } from './dist/server/src/adapters/pg-store.js';
-          import { SCHEMA_SQL } from './dist/server/src/adapters/pglite-store.js';
-          const c = new pg.Client({ connectionString: process.env.PG_URL });
-          await c.connect();
-          for (const s of splitSchemaStatements(SCHEMA_SQL)) await c.query(s);
-          console.log('schema: ' + splitSchemaStatements(SCHEMA_SQL).length + ' statements ok');
-          await c.query('BEGIN');
-          await c.query(`SELECT set_config('role','sovereign_app', true)`);
-          await c.query(`SELECT set_config('app.tenant', $1, true)`, ['tune']);
-          await c.query(`INSERT INTO accounts (id, balance, version) VALUES ('a', 1000000000000, 0), ('b', 0, 0) ON CONFLICT (tenant, id) DO NOTHING`);
-          await c.query('COMMIT');
-          let k = 0;
-          const ONE = `WITH up AS (UPDATE accounts SET balance = balance + CASE WHEN id = $4 THEN $1 ELSE -$1 END, version = version + 1 WHERE id IN ($2, $4) AND EXISTS (SELECT 1 FROM accounts af, accounts ab WHERE af.id = $2 AND ab.id = $4 AND af.version = $3 AND ab.version = $5 AND af.balance >= $1) RETURNING id), tr AS (INSERT INTO transfers (from_id, to_id, amount, idempotency_key, status) SELECT $2, $4, $1, $6, 'committed' FROM up WHERE up.id = $2 RETURNING id), ob AS (INSERT INTO outbox (topic, payload) SELECT 'transfer.committed', json_build_object('transferId', tr.id, 'from', $2, 'to', $4, 'amount', $1)::text FROM tr RETURNING outbox.id), ev AS (SELECT s.stream, COALESCE(MAX(e.seq), 0) + 1 AS next FROM (VALUES ($7), ($8)) AS s(stream) LEFT JOIN event_log e ON e.stream = s.stream GROUP BY s.stream), evins AS (INSERT INTO event_log (stream, seq, type, payload) SELECT e.stream, e.next, CASE WHEN e.stream = $7 THEN 'debited' ELSE 'credited' END, json_build_object('transferId', tr.id, 'amount', $1)::text FROM ev e, tr RETURNING id) SELECT tr.id FROM tr, ob, evins`;
-          async function one(client) {
-            await client.query('BEGIN');
-            await client.query(`SELECT set_config('role','sovereign_app', true)`);
-            await client.query(`SELECT set_config('app.tenant', $1, true)`, ['tune']);
-            try {
-              const read = await client.query(`SELECT id, balance, version FROM accounts WHERE id IN ('a','b') ORDER BY id FOR UPDATE`);
-              const f = read.rows[0], t = read.rows[1];
-              const ins = await client.query(ONE, [1, 'a', Number(f.version), 'b', Number(t.version), 'tune-' + (k++), 'account:a', 'account:b']);
-              if ((ins.rowCount ?? 0) === 0) throw new Error('conflict');
-              await client.query('COMMIT');
-            } catch (e) { await client.query('ROLLBACK'); throw e; }
-          }
-          async function batch(label, n) {
-            const t0 = performance.now();
-            for (let i = 0; i < n; i++) await one(c);
-            console.log(label + ' ' + ((performance.now() - t0) / n).toFixed(2) + ' ms/op');
-          }
-          await batch('fresh       :', 200);
-          await batch('after 400   :', 200);
-          await c.end();
-          for (const poolMax of [5, 20]) {
-            const pool = new pg.Pool({ connectionString: process.env.PG_URL, max: poolMax });
-            for (const workers of [5, 50, 100]) {
-              const stopAt = Date.now() + 3000;
-              let done = 0, errs = 0;
-              const durs = [];
-              const worker = async (wid) => {
-                let i = 0;
-                while (Date.now() < stopAt) {
-                  const t0 = performance.now();
-                  try {
-                    const cl = await pool.connect();
-                    try {
-                      await cl.query('BEGIN');
-                      await cl.query(`SELECT set_config('role','sovereign_app', true)`);
-                      await cl.query(`SELECT set_config('app.tenant', $1, true)`, ['tune']);
-                      const read = await cl.query(`SELECT id, balance, version FROM accounts WHERE id IN ('a','b') ORDER BY id FOR UPDATE`);
-                      const f = read.rows[0], t = read.rows[1];
-                      const ins = await cl.query(ONE, [1, 'a', Number(f.version), 'b', Number(t.version), 'cc-' + poolMax + '-' + workers + '-' + wid + '-' + (i++) + '-' + Math.random().toString(36).slice(2), 'account:a', 'account:b']);
-                      if ((ins.rowCount ?? 0) === 0) throw new Error('conflict');
-                      await cl.query('COMMIT');
-                    } catch (e) { await cl.query('ROLLBACK').catch(() => {}); throw e; }
-                    finally { cl.release(); }
-                  } catch { errs++; }
-                  const d = performance.now() - t0;
-                  if (durs.length < 200000) durs.push(d);
-                  done++;
-                }
-              };
-              await Promise.all(Array.from({ length: workers }, (_, w) => worker(w)));
-              const sorted = durs.slice().sort((a, b) => a - b);
-              const p = (q) => sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((q / 100) * sorted.length))] : 0;
-              console.log(`pool=${poolMax} workers=${workers}: ${(done / 3).toFixed(0)} rps · errs ${errs} · p50 ${p(50).toFixed(0)}ms · p99 ${p(99).toFixed(0)}ms`);
-            }
-            await pool.end();
-          }
-          const c2 = new pg.Client({ connectionString: process.env.PG_URL });
-          await c2.connect();
-          await c2.query('DELETE FROM outbox');
-          await c2.query(`DELETE FROM event_log WHERE stream LIKE 'account:%'`);
-          await c2.query(`SELECT set_config('role','sovereign_app', true)`);
-          await c2.query(`SELECT set_config('app.tenant', $1, true)`, ['tune']);
-          await c2.query("DELETE FROM transfers WHERE tenant = 'tune'");
-          await c2.query("DELETE FROM accounts WHERE tenant = 'tune'");
-          await c2.end();
-          EOF
-          node ./probe-tmp.mjs > /tmp/tune.log 2>&1
-          RC=$?
-          cat /tmp/tune.log
-          rm -f ./probe-tmp.mjs
-          echo "::notice title=DIAG-TUNE-rc=$RC::$(base64 -w0 /tmp/tune.log)"
-          exit $RC
-
-      - name: "TUNE fixture (CI: fast autovacuum to keep hot-row HOT chains short under the storm)"
-        run: |
-          set +e
-          node --input-type=module -e "
-          import pg from 'pg';
-          const c = new pg.Client({ connectionString: process.env.PG_URL });
-          await c.connect();
-          await c.query('ALTER SYSTEM SET autovacuum_naptime = 2000');
-          await c.query('ALTER SYSTEM SET autovacuum_vacuum_threshold = 0');
-          await c.query('ALTER SYSTEM SET autovacuum_vacuum_scale_factor = 0');
-          await c.query('SELECT pg_reload_conf()');
-          await c.end();
-          "
-          RC=$?
-          exit $RC
-      - name: "TESTS (diag: base64 notice annotation)"
-        run: |
-          set +e
-          node --test dist/server/src/tests/*.test.js > /tmp/t.log 2>&1
-          RC=$?
-          tail -c 1200 /tmp/t.log
-          T=$(tail -c 2800 /tmp/t.log | base64 -w0)
-          F=$(grep -n -A 30 'not ok' /tmp/t.log | head -c 2800 | base64 -w0)
-          echo "::notice title=DIAG-TESTS-rc=$RC-tail::${T}"
-          echo "::notice title=DIAG-TESTS-rc=$RC-fail::${F}"
-          exit $RC
-      - name: "Load storm (diag: base64 notice annotation)"
-        run: |
-          set +e
-          SEED_DEMO=1 HTTP_PORT=8081 node dist/server/src/control-plane.js > /tmp/cp.log 2>&1 &
+          SEED_DEMO=1 HTTP_PORT=8081 node dist/server/src/control-plane.js &
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:8081/healthz > /dev/null && break
             sleep 1
           done
-          node scripts/load-test.mjs > /tmp/storm.log 2>&1
-          RC=$?
-          kill %1 2>/dev/null
-          tail -c 1200 /tmp/storm.log
-          CP=$(tail -c 2800 /tmp/cp.log | base64 -w0)
-          ST=$(tail -c 2800 /tmp/storm.log | base64 -w0)
-          echo "::notice title=DIAG-STORM-rc=$RC-cp::${CP}"
-          echo "::notice title=DIAG-STORM-rc=$RC-load::${ST}"
-          exit $RC
+          node scripts/load-test.mjs
+          kill %1
   e2e:
     name: E2E · Playwright (Chromium)
     runs-on: ubuntu-latest
@@ -188,10 +64,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps chromium
-      - name: "E2E (diag: capture output to step summary)"
-        run: |
-          npx playwright test 2>&1 | tee /tmp/e.log | tail -c 3000
-          { echo; echo '### diag: e2e tail (15000 chars)'; tail -c 15000 /tmp/e.log; } >> "$GITHUB_STEP_SUMMARY"
+      - run: npx playwright test
       - uses: actions/upload-artifact@v4
         if: failure()
         with: { name: playwright-report, path: web/playwright-report/, retention-days: 7 }
