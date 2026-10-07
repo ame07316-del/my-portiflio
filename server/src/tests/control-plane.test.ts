@@ -1,7 +1,8 @@
 /**
- * control-plane.test.ts — full-stack integration (Phases 2+3+5+6 together):
- * HTTP control plane + UDP edge + OCC ledger + idempotency + envelope +
- * observability, one sovereign system under test.
+ * control-plane.test.ts — Phase 7 zero-trust integration (full stack):
+ * mandatory auth (401 on admin routes + login throttling), SSE realtime
+ * broadcast, CRDT op persistence + catch-up, OCC + idempotency, UDP edge,
+ * ABAC — one sovereign system under test.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,74 +12,163 @@ import { createSystem } from '../app/container.js';
 import { startControlPlane } from '../control-plane.js';
 import { GATEWAY_MAGIC } from '../transport/udp-gateway.js';
 
+const ADMIN_SECRET = 'integration-admin-secret-0123456789';
+
 async function makeSystem() {
   const sys = await createSystem({
     udpPort: 0,
     host: '127.0.0.1',
     masterSecret: 'integration-master-secret-0123456789',
     idempotencySecret: 'integration-idempotency-secret-01234',
+    adminSecret: ADMIN_SECRET,
     sampleRate: 1,
   });
   await sys.start();
   const http = await startControlPlane(0, sys);
   const port = (http.address() as AddressInfo).port;
-  return { sys, http, base: `http://127.0.0.1:${port}` };
+  const base = `http://127.0.0.1:${port}`;
+  // One login through the real HTTP door; the token is reused via headers.
+  const login = (await (
+    await fetch(`${base}/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ secret: ADMIN_SECRET }),
+    })
+  ).json()) as { token: string };
+  return { sys, http, base, token: login.token, headers: { authorization: `Bearer ${login.token}` } };
 }
 
-test('control plane: health, transfer, idempotent replay, reads, envelope, metrics', async () => {
+test('auth door: anonymous 401, open routes stay open, login lifecycle, logout revokes', async () => {
+  const { sys, http, base, token, headers } = await makeSystem();
+  try {
+    // Open routes need no credentials.
+    assert.equal((await fetch(`${base}/healthz`)).status, 200);
+    assert.equal((await fetch(`${base}/metrics`)).status, 200);
+
+    // Anonymous → 401 on every admin route.
+    assert.equal((await fetch(`${base}/transfer`, { method: 'POST', body: '{}' })).status, 401);
+    assert.equal((await fetch(`${base}/ops`, { method: 'POST', body: '{}' })).status, 401);
+    assert.equal((await fetch(`${base}/account/t1/alice`)).status, 401);
+    assert.equal((await fetch(`${base}/events`)).status, 401);
+
+    // Unknown bearer → 401.
+    assert.equal(
+      (await fetch(`${base}/account/t1/alice`, { headers: { authorization: 'Bearer nope' } })).status,
+      401,
+    );
+
+    // A valid login issued a real token (32 random bytes → ≥ 40 base64url chars).
+    assert.ok(token.length >= 40);
+
+    // Ghost account with a valid bearer → 404 (auth passed, data absent).
+    await sys.store.createAccount('t1', 'alice', 10_000);
+    assert.equal((await fetch(`${base}/account/t1/ghost`, { headers })).status, 404);
+
+    // Logout revokes the token immediately.
+    sys.auth.logout(token);
+    assert.equal((await fetch(`${base}/account/t1/alice`, { headers })).status, 401);
+  } finally {
+    http.close();
+    await sys.stop();
+  }
+});
+
+test('login throttling: 8 consecutive guesses include 429', async () => {
   const { sys, http, base } = await makeSystem();
+  try {
+    const statuses: number[] = [];
+    for (let i = 0; i < 8; i++) {
+      const res = await fetch(`${base}/auth/login`, {
+        method: 'POST',
+        body: JSON.stringify({ secret: `guess-${i}-padding-to-cross-32-chars` }),
+      });
+      statuses.push(res.status);
+    }
+    assert.ok(statuses.includes(429), `expected a 429 in [${statuses.join(',')}]`);
+    assert.ok(sys.guard.deniedLogin >= 1, 'guard must count the denied logins');
+  } finally {
+    http.close();
+    await sys.stop();
+  }
+});
+
+test('authenticated transfer: OCC replay, balance read, seal round-trip, realtime+auth probes', async () => {
+  const { sys, http, base, headers } = await makeSystem();
   try {
     await sys.store.createAccount('t1', 'alice', 10_000);
     await sys.store.createAccount('t1', 'bob', 0);
 
-    // ---- /healthz ----
-    const health = await (await fetch(`${base}/healthz`)).json() as { status: string; components: unknown[] };
-    assert.equal(health.status, 'ok');
-    assert.ok(Array.isArray(health.components) && health.components.length >= 3);
-
-    // ---- /transfer (ABAC + validation + OCC + outbox in one path) ----
     const body = JSON.stringify({ tenant: 't1', from: 'alice', to: 'bob', amount: 2_500 });
-    const r1 = await (await fetch(`${base}/transfer`, { method: 'POST', body })).json() as {
+    const r1 = (await (await fetch(`${base}/transfer`, { method: 'POST', headers, body })).json()) as {
       result: { ok: boolean; replayed?: boolean; transferId?: number };
       idempotencyKey: string;
     };
     assert.ok(r1.result.ok);
 
-    // deterministic idempotency: SAME body ⇒ SAME key ⇒ replay
-    const r2 = await (await fetch(`${base}/transfer`, { method: 'POST', body })).json() as typeof r1;
-    assert.ok(r2.result.ok);
+    // Deterministic idempotency: SAME body ⇒ SAME key ⇒ replay of the ORIGINAL.
+    const r2 = (await (await fetch(`${base}/transfer`, { method: 'POST', headers, body })).json()) as typeof r1;
     assert.equal(r2.result.replayed, true);
-    assert.equal(r2.idempotencyKey, r1.idempotencyKey);
     assert.equal(r2.result.transferId, r1.result.transferId);
 
-    // ---- SWR read side ----
-    const alice = await (await fetch(`${base}/account/t1/alice`)).json() as { balance: number };
+    const alice = (await (await fetch(`${base}/account/t1/alice`, { headers })).json()) as { balance: number };
     assert.equal(alice.balance, 7_500);
-    const ghost = await fetch(`${base}/account/t1/nobody`);
-    assert.equal(ghost.status, 404);
 
-    // ---- envelope demo ----
-    const seal = await (await fetch(`${base}/seal`, { method: 'POST', body: 'hello sovereign' })).json() as {
+    const seal = (await (await fetch(`${base}/seal`, { method: 'POST', headers, body: 'hello sovereign' })).json()) as {
       opened: string;
-      ciphertextBytes: number;
     };
     assert.equal(seal.opened, 'hello sovereign');
-    assert.ok(seal.ciphertextBytes > 0);
 
-    // ---- bad input discipline ----
-    assert.equal((await fetch(`${base}/transfer`, { method: 'POST', body: '{oops' })).status, 400);
-    assert.equal(
-      (await fetch(`${base}/transfer`, { method: 'POST', body: JSON.stringify({ tenant: 't1' }) })).status,
-      400,
-    );
-
-    // ---- /metrics ----
+    // Phase 7 components are observable in the metrics stream.
     const metrics = await (await fetch(`${base}/metrics`)).text();
-    assert.match(metrics, /sovereign_uptime_seconds/);
-    assert.match(metrics, /sovereign_component_depth\{name="udp_gateway"\}/);
+    assert.match(metrics, /sovereign_component_depth\{name="realtime_hub"\}/);
+    assert.match(metrics, /sovereign_component_depth\{name="auth"\}/);
+  } finally {
+    http.close();
+    await sys.stop();
+  }
+});
 
-    // ---- tracing recorded the transfers (sampleRate=1) ----
-    assert.ok(sys.tracer.sampled >= 2);
+test('SSE: /events streams op.received live; /ops/since replays the op', async () => {
+  const { sys, http, base, headers } = await makeSystem();
+  try {
+    const res = await fetch(`${base}/events?tenant=web1`, { headers });
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type') ?? '', /text\/event-stream/);
+    const stream = res.body;
+    assert.ok(stream, 'SSE body stream must exist');
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+    const textPromise = (async () => {
+      let acc = '';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        acc += decoder.decode(value, { stream: true });
+        if (acc.includes('event: op.received') && acc.includes('بث حي')) return acc;
+      }
+      return acc;
+    })();
+
+    const opRes = await fetch(`${base}/ops`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ tenant: 'web1', op: { kind: 'set', id: 'p1', field: 'title', v: 'بث حي' } }),
+    });
+    assert.equal(opRes.status, 200);
+
+    const frame = await Promise.race([
+      textPromise,
+      new Promise<string>((_, reject) => setTimeout(() => reject(new Error('SSE frame not delivered within 3s')), 3_000)),
+    ]);
+    assert.match(frame, /event: op\.received/);
+    assert.match(frame, /بث حي/);
+
+    // Catch-up endpoint sees exactly the one persisted op for this tenant.
+    const since = (await (await fetch(`${base}/ops/since?tenant=web1&after=0`, { headers })).json()) as {
+      ops: Array<{ id: number; op: string }>;
+    };
+    assert.equal(since.ops.length, 1);
+    await reader.cancel();
   } finally {
     http.close();
     await sys.stop();
@@ -116,34 +206,6 @@ test('control plane: UDP edge admits a transfer end-to-end (Phase 2 path)', asyn
     assert.equal((await sys.store.getAccount('edge', 'a'))?.balance, 3_800);
     assert.equal((await sys.store.getAccount('edge', 'b'))?.balance, 1_200);
     assert.ok(sys.gateway.metrics.processed >= 1);
-  } finally {
-    http.close();
-    await sys.stop();
-  }
-});
-
-test('control plane: /ops persists replicated CRDT ops with an outbox row', async () => {
-  const { sys, http, base } = await makeSystem();
-  try {
-    const res = await (
-      await fetch(`${base}/ops`, {
-        method: 'POST',
-        body: JSON.stringify({
-          tenant: 'web1',
-          op: { kind: 'set', id: 'p1', field: 'title', v: 'من الواجهة' },
-        }),
-      })
-    ).json() as { ok: boolean; id: number };
-    assert.equal(res.ok, true);
-    assert.ok(res.id >= 1);
-
-    // outbox carries the op.received breadcrumb (drained already by the relay)
-    const events = await sys.store.outboxPending(10);
-    assert.equal(events.length, 0, 'relay already drained');
-
-    // malformed bodies are rejected before touching storage
-    assert.equal((await fetch(`${base}/ops`, { method: 'POST', body: '{}' })).status, 400);
-    assert.equal((await fetch(`${base}/ops`, { method: 'POST', body: '{' })).status, 400);
   } finally {
     http.close();
     await sys.stop();

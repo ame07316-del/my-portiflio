@@ -54,6 +54,8 @@ export interface LedgerStore {
   eventsSince(afterId: number, limit: number): Promise<EventRow[]>;
   /** Persist one replicated CRDT op (server-side sync sink). */
   appendOp(tenant: string, opJson: string): Promise<number>;
+  /** Read persisted ops after a cursor (replication catch-up). */
+  opsSince(tenant: string, afterId: number, limit: number): Promise<Array<{ id: number; op: string }>>;
   close(): Promise<void>;
 }
 

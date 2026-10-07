@@ -154,6 +154,7 @@ test('OCC: domain retry policy recovers from transient conflicts', async () => {
       outboxMarkSent: (ids) => real.outboxMarkSent(ids),
       eventsSince: (a, l) => real.eventsSince(a, l),
       appendOp: (t, o) => real.appendOp(t, o),
+      opsSince: (t, a, l) => real.opsSince(t, a, l),
       close: () => real.close(),
     };
     const res = await executeTransfer(spy, {
