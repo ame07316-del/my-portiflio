@@ -42,10 +42,10 @@ jobs:
         with: { node-version: 22, cache: npm, cache-dependency-path: server/package-lock.json }
       - run: npm ci
       - run: npm run build
-      - name: "TUNE probe (diag: hot-row cost growth + vacuum recovery)"
+      - name: "TUNE probe (diag: hot-row cost + concurrent throughput)"
         run: |
           set +e
-          node --input-type=module -e "
+          cat > /tmp/probe.mjs <<'EOF'
           import pg from 'pg';
           import { splitSchemaStatements } from './dist/server/src/adapters/pg-store.js';
           import { SCHEMA_SQL } from './dist/server/src/adapters/pglite-store.js';
@@ -54,42 +54,38 @@ jobs:
           for (const s of splitSchemaStatements(SCHEMA_SQL)) await c.query(s);
           console.log('schema: ' + splitSchemaStatements(SCHEMA_SQL).length + ' statements ok');
           await c.query('BEGIN');
-          await c.query(\`SELECT set_config('role','sovereign_app', true)\`);
-          await c.query(\`SELECT set_config('app.tenant', \$1, true)\`, ['tune']);
-          await c.query(\`INSERT INTO accounts (id, balance, version) VALUES ('a', 1000000000000, 0), ('b', 0, 0) ON CONFLICT (tenant, id) DO NOTHING\`);
+          await c.query(`SELECT set_config('role','sovereign_app', true)`);
+          await c.query(`SELECT set_config('app.tenant', $1, true)`, ['tune']);
+          await c.query(`INSERT INTO accounts (id, balance, version) VALUES ('a', 1000000000000, 0), ('b', 0, 0) ON CONFLICT (tenant, id) DO NOTHING`);
           await c.query('COMMIT');
           let k = 0;
-          const ONE = \`WITH f AS (UPDATE accounts SET balance = balance - \$1, version = version + 1 WHERE id = \$2 AND version = \$3 AND balance >= \$1 RETURNING id), t AS (UPDATE accounts SET balance = balance + \$1, version = version + 1 WHERE id = \$4 AND version = \$5 RETURNING id), tr AS (INSERT INTO transfers (from_id, to_id, amount, idempotency_key, status) SELECT \$2, \$4, \$1, \$6, 'committed' FROM f, t RETURNING id), ob AS (INSERT INTO outbox (topic, payload) SELECT 'transfer.committed', json_build_object('transferId', tr.id, 'from', \$2, 'to', \$4, 'amount', \$1)::text FROM tr RETURNING outbox.id), ev AS (SELECT s.stream, COALESCE(MAX(e.seq), 0) + 1 AS next FROM (VALUES (\$7), (\$8)) AS s(stream) LEFT JOIN event_log e ON e.stream = s.stream GROUP BY s.stream), evins AS (INSERT INTO event_log (stream, seq, type, payload) SELECT e.stream, e.next, CASE WHEN e.stream = \$7 THEN 'debited' ELSE 'credited' END, json_build_object('transferId', tr.id, 'amount', \$1)::text FROM ev e, tr RETURNING id) SELECT tr.id FROM tr, ob, evins\`;
-          async function one() {
-            await c.query('BEGIN');
-            await c.query(\`SELECT set_config('role','sovereign_app', true)\`);
-            await c.query(\`SELECT set_config('app.tenant', \$1, true)\`, ['tune']);
+          const ONE = `WITH f AS (UPDATE accounts SET balance = balance - $1, version = version + 1 WHERE id = $2 AND version = $3 AND balance >= $1 RETURNING id), t AS (UPDATE accounts SET balance = balance + $1, version = version + 1 WHERE id = $4 AND version = $5 RETURNING id), tr AS (INSERT INTO transfers (from_id, to_id, amount, idempotency_key, status) SELECT $2, $4, $1, $6, 'committed' FROM f, t RETURNING id), ob AS (INSERT INTO outbox (topic, payload) SELECT 'transfer.committed', json_build_object('transferId', tr.id, 'from', $2, 'to', $4, 'amount', $1)::text FROM tr RETURNING outbox.id), ev AS (SELECT s.stream, COALESCE(MAX(e.seq), 0) + 1 AS next FROM (VALUES ($7), ($8)) AS s(stream) LEFT JOIN event_log e ON e.stream = s.stream GROUP BY s.stream), evins AS (INSERT INTO event_log (stream, seq, type, payload) SELECT e.stream, e.next, CASE WHEN e.stream = $7 THEN 'debited' ELSE 'credited' END, json_build_object('transferId', tr.id, 'amount', $1)::text FROM ev e, tr RETURNING id) SELECT tr.id FROM tr, ob, evins`;
+          async function one(client) {
+            await client.query('BEGIN');
+            await client.query(`SELECT set_config('role','sovereign_app', true)`);
+            await client.query(`SELECT set_config('app.tenant', $1, true)`, ['tune']);
             try {
-              const read = await c.query(\`SELECT id, balance, version FROM accounts WHERE id IN ('a','b') ORDER BY id\`);
+              const read = await client.query(`SELECT id, balance, version FROM accounts WHERE id IN ('a','b') ORDER BY id`);
               const f = read.rows[0], t = read.rows[1];
-              const ins = await c.query(ONE, [1, 'a', Number(f.version), 'b', Number(t.version), 'tune-' + (k++), 'account:a', 'account:b']);
+              const ins = await client.query(ONE, [1, 'a', Number(f.version), 'b', Number(t.version), 'tune-' + (k++), 'account:a', 'account:b']);
               if ((ins.rowCount ?? 0) === 0) throw new Error('conflict');
-              await c.query('COMMIT');
-            } catch (e) { await c.query('ROLLBACK'); throw e; }
+              await client.query('COMMIT');
+            } catch (e) { await client.query('ROLLBACK'); throw e; }
           }
           async function batch(label, n) {
             const t0 = performance.now();
-            for (let i = 0; i < n; i++) await one();
+            for (let i = 0; i < n; i++) await one(c);
             console.log(label + ' ' + ((performance.now() - t0) / n).toFixed(2) + ' ms/op');
           }
           await batch('fresh       :', 200);
           await batch('after 400   :', 200);
-          await batch('after 1200  :', 200);
           await c.end();
-          // ---- concurrent throughput probe (real CTE, production-like pool) ----
           for (const poolMax of [5, 20]) {
             const pool = new pg.Pool({ connectionString: process.env.PG_URL, max: poolMax });
             for (const workers of [5, 50, 100]) {
-              const N = workers, durMs = 3000;
-              const stopAt = Date.now() + durMs;
+              const stopAt = Date.now() + 3000;
               let done = 0, errs = 0;
               const durs = [];
-              const key = (i) => `cc-${poolMax}-${workers}-${Date.now()}-${i}-${Math.random().toString(36).slice(2)}`;
               const worker = async (wid) => {
                 let i = 0;
                 while (Date.now() < stopAt) {
@@ -98,11 +94,11 @@ jobs:
                     const cl = await pool.connect();
                     try {
                       await cl.query('BEGIN');
-                      await cl.query(\`SELECT set_config('role','sovereign_app', true)\`);
-                      await cl.query(\`SELECT set_config('app.tenant', \$1, true)\`, ['tune']);
-                      const read = await cl.query(\`SELECT id, balance, version FROM accounts WHERE id IN ('a','b') ORDER BY id\`);
+                      await cl.query(`SELECT set_config('role','sovereign_app', true)`);
+                      await cl.query(`SELECT set_config('app.tenant', $1, true)`, ['tune']);
+                      const read = await cl.query(`SELECT id, balance, version FROM accounts WHERE id IN ('a','b') ORDER BY id`);
                       const f = read.rows[0], t = read.rows[1];
-                      const ins = await cl.query(ONE, [1, 'a', Number(f.version), 'b', Number(t.version), key(i++), 'account:a', 'account:b']);
+                      const ins = await cl.query(ONE, [1, 'a', Number(f.version), 'b', Number(t.version), 'cc-' + poolMax + '-' + workers + '-' + wid + '-' + (i++) + '-' + Math.random().toString(36).slice(2), 'account:a', 'account:b']);
                       if ((ins.rowCount ?? 0) === 0) throw new Error('conflict');
                       await cl.query('COMMIT');
                     } catch (e) { await cl.query('ROLLBACK').catch(() => {}); throw e; }
@@ -113,27 +109,29 @@ jobs:
                   done++;
                 }
               };
-              await Promise.all(Array.from({ length: N }, (_, w) => worker(w)));
-              const secs = durMs / 1000;
+              await Promise.all(Array.from({ length: workers }, (_, w) => worker(w)));
               const sorted = durs.slice().sort((a, b) => a - b);
               const p = (q) => sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((q / 100) * sorted.length))] : 0;
-              console.log(\`pool=\${poolMax} workers=\${N}: \${(done / secs).toFixed(0)} rps · errs \${errs} · p50 \${p(50).toFixed(0)}ms · p99 \${p(99).toFixed(0)}ms\`);
+              console.log(`pool=${poolMax} workers=${workers}: ${(done / 3).toFixed(0)} rps · errs ${errs} · p50 ${p(50).toFixed(0)}ms · p99 ${p(99).toFixed(0)}ms`);
             }
             await pool.end();
           }
-          // cleanup — leave the fixture pristine for the test suite
-          await c.query('DELETE FROM outbox');
-          await c.query(\`DELETE FROM event_log WHERE stream LIKE 'account:%'\`);
-          await c.query(\`SELECT set_config('role','sovereign_app', true)\`);
-          await c.query(\`SELECT set_config('app.tenant', \$1, true)\`, ['tune']);
-          await c.query('DELETE FROM transfers WHERE tenant = \'tune\'');
-          await c.query('DELETE FROM accounts WHERE tenant = \'tune\'');
-          await c.end();
-          " > /tmp/tune.log 2>&1
+          const c2 = new pg.Client({ connectionString: process.env.PG_URL });
+          await c2.connect();
+          await c2.query('DELETE FROM outbox');
+          await c2.query(`DELETE FROM event_log WHERE stream LIKE 'account:%'`);
+          await c2.query(`SELECT set_config('role','sovereign_app', true)`);
+          await c2.query(`SELECT set_config('app.tenant', $1, true)`, ['tune']);
+          await c2.query("DELETE FROM transfers WHERE tenant = 'tune'");
+          await c2.query("DELETE FROM accounts WHERE tenant = 'tune'");
+          await c2.end();
+          EOF
+          node /tmp/probe.mjs > /tmp/tune.log 2>&1
           RC=$?
           cat /tmp/tune.log
           echo "::notice title=DIAG-TUNE-rc=$RC::$(base64 -w0 /tmp/tune.log)"
           exit $RC
+
       - name: "TUNE fixture (CI: fast autovacuum to keep hot-row HOT chains short under the storm)"
         run: |
           set +e
