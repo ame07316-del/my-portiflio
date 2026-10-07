@@ -60,31 +60,57 @@ PostgreSQL حقيقي مدمج للاختبارات — نفس SQL الإنتا�
 | `security/idempotency.ts` | مفاتيح الختم = HMAC-SHA256(secret, tenant∥intent∥digest): حتمية لإعادة المحاولة الآمنة، وأي تحريف يولّد مفتاحًا مختلفًا | O(payload) |
 | `security/abac.ts` | محرك ABAC تقريري (بلا كود داخل السياسات): deny-overrides ثم افتراض الرفض | O(قواعد) |
 | `adapters/pglite-store.ts` | **RLS + FORCE** ودور غير مميز `sovereign_app`: تجاوز الـ API بلا سياق مستأجر يعيد **صفر صفوف** (مختبر)، والكتابات عبر المستأجرين تُرفض بـ WITH CHECK | داخل المحرك |
+| `security/auth.ts` | مصادقة إدارية إلزامية: فحص السر بوقت ثابت (≥ 32 محرفًا)، جلسات 12 ساعة من 32 بايت عشوائية مخزنة كـ SHA-256 فقط وقابلة للإلغاء | O(1) |
+| `security/http-guard.ts` | جرادل قبول لكل IP: عام 200/ث (burst 100) وباب دخول 2/دقيقة (burst 5) — ثمانية تخمينات متتالية تضمن 429 | O(1) |
+| `adapters/pg-store.ts` | **PostgreSQL حقيقي** (node-postgres) بمفتاح `PG_URL` واحد: نفس المخطط وRLS وOCC وقناة NOTIFY، ويرفض النص الصريح و`no-verify` للمضيف البعيد | رحلة اتصال |
 
 ### المرحلة 6 — مراقبة لحظية ونشر ذاتي
 | الملف | الآلية | التعقيد |
 |---|---|---|
 | `obs/tracer.ts` | عينات حتمية بـ fnv1a32 (نفس الأثر موزعًا يبقى كاملًا أو يغيب)؛ غير المُسام يكلّف مقارنة واحدة وصفر تخصيصات؛ حلقة محدودة تسقط الأقدم | O(1)/مدى |
 | `obs/health.ts` | زمن حلقة الأحداث بانحراف مؤقت منخفض التردد، كومة الذاكرة، وأعماق الطوابير/العمال عند الطلب فقط؛ إخراج Prometheus | O(مكونات) |
-| `control-plane.ts` | `/healthz` (200/503 حسب الحالة)، `/metrics`، وأجسام الطلبات **مقيدة بـ 64KiB قبل أي تحليل** | توجيه O(1) |
+| `obs/realtime.ts` | نواة بث لحظي (SSE): نطاق مستأجرين، إسقاط المستهلك البطيء بعداد، وقناة NOTIFY بين النسخ (`sovereign_events`) | O(مشتركين) |
+| `control-plane.ts` | **باب صفر الثقة**: كل مسارات إداري خلف 401، `POST /auth/login` الوحيد المفتوح بخنقته الخاصة (429 `login_rate_limited`)، `GET /events` SSE و`GET /ops/since` للتعويض، وأجسام الطلبات **مقيدة بـ 64KiB قبل أي تحليل** | توجيه O(1) |
 
 ## التشغيل
 
 ```bash
 cd server
-npm install          # أدوات تطوير فقط
-npm test             # 39 اختبارًا: نقل حقيقي عبر dgram، دفتر OCC على
-                     #   PostgreSQL مدمج، عزل RLS بدور غير مميز،
-                     #   تكامل كامل عبر HTTP + UDP
-npm start            # HTTP :8081 + UDP :9443
+npm install
+npm run build
+npm test             # 42 اختبارًا: محرك مدمج + PostgreSQL حقيقي (PG_URL)،
+                     #   عزل RLS بدور غير مميز، ABAC، باب 401 وخنق 429،
+                     #   بث SSE، تكامل كامل عبر HTTP + UDP
 ```
 
-أمثلة حية:
+الإقلاع يتطلب **ثلاثة أسرار** (كلها ≥ 32 محرفًا — يرفض الإقلاع بدونها
+ويعرض تلميح `openssl rand -base64 48`):
+`MASTER_SECRET`، `IDEMPOTENCY_SECRET`، `ADMIN_SECRET` —
+و`PG_URL` اختياريًا للمحرك الخارجي (بدونه المحرك المدمج):
+
 ```bash
-curl -s localhost:8081/healthz
-curl -s localhost:8081/metrics
-curl -s -X POST localhost:8081/transfer -d '{"tenant":"t1","from":"alice","to":"bob","amount":2500}'
-curl -s localhost:8081/account/t1/alice
+MASTER_SECRET="$(openssl rand -base64 48)" \
+IDEMPOTENCY_SECRET="$(openssl rand -base64 48)" \
+ADMIN_SECRET="$(openssl rand -base64 48)" \
+SEED_DEMO=1 node dist/server/src/control-plane.js
+# HTTP :8081 (باب صفر الثقة) + UDP :9443
+```
+
+أمثلة حية (دخول مسجَّل أولًا):
+```bash
+TOKEN=$(curl -s -X POST localhost:8081/auth/login \
+     -d "{\"secret\":\"$ADMIN_SECRET\"}" | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).token')
+curl -s localhost:8081/healthz                                   # مفتوح
+curl -s localhost:8081/metrics                                   # مفتوح
+curl -s -H "Authorization: Bearer $TOKEN" localhost:8081/account/demo/alice
+curl -s -X POST localhost:8081/transfer -H "Authorization: Bearer $TOKEN" \
+     -d '{"tenant":"demo","from":"alice","to":"bob","amount":2500}'
+curl -s -N -H "Authorization: Bearer $TOKEN" 'localhost:8081/events?tenant=web1'   # SSE
+```
+
+عاصفة الحمل (صفر اعتماديات — تحفظ قانون المال 100000):
+```bash
+ADMIN_SECRET="$ADMIN_SECRET" node scripts/load-test.mjs   # → LOAD TEST PASSED ✅
 ```
 
 ## حدود الصدق (ما يحتاج الخادم الفعلي)

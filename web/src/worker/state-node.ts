@@ -144,22 +144,22 @@ export class StateNode {
   #seed(): void {
     const samples: Array<Record<string, FieldValue>> = [
       {
-        title: 'Estate Platform — منصة عقارية',
-        summary: 'Real-time listings with map clustering and bilingual search.',
-        status: 'live',
-        sort: 1,
+        title: 'Interactive Restaurant Menu', title_ar: 'منيو مطعم تفاعلي',
+        summary: 'QR-first digital menu with a full admin dashboard: dishes, categories, prices and one-tap availability.',
+        summary_ar: 'منيو رقمي يعمل بالـ QR مع لوحة تحكم كاملة: أصناف وأقسام وأسعار وإتاحة الصنف بضغطة واحدة.',
+        url: 'https://interactive-restaurant-menu-one.vercel.app/', status: 'live', sort: 1,
       },
       {
-        title: 'Performance Dashboard — لوحة أداء',
-        summary: 'Lock-free telemetry ingestion at 120 Hz, rendered off the main thread.',
-        status: 'live',
-        sort: 2,
+        title: 'Gym & Fitness Platform', title_ar: 'منصة جيم ولياقة',
+        summary: 'Conversion-focused gym site: timetable, membership plans and a protected staff dashboard.',
+        summary_ar: 'موقع جيم مصمم للتحويل: جدول الحصص وباقات الاشتراك ولوحة إدارة محمية للفريق.',
+        url: 'https://gym-fitness-liard.vercel.app/', status: 'live', sort: 2,
       },
       {
-        title: 'Offline CRM — نظام عملاء بلا اتصال',
-        summary: 'CRDT-synced records: writes never block, conflicts never lose data.',
-        status: 'draft',
-        sort: 3,
+        title: 'EstateHub Pro', title_ar: 'منصة العقارات',
+        summary: 'Property listing hub with rich search, filtering and detailed pages that scale to thousands of units.',
+        summary_ar: 'منصة عقارات ببحث متقدم وفلاتر وصفحات تفاصيل تستحمل من عشرات لآلاف الوحدات.',
+        url: 'https://estate-hub-pro.vercel.app/', status: 'live', sort: 3,
       },
     ];
     for (const fields of samples) {

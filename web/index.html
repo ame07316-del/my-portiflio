@@ -45,6 +45,12 @@
     [data-status-pill][data-phase="degraded"] { color: #f0c674; border-color: #6b5a2e; }
     [data-status-pill][data-phase="fatal"] { color: #ef6f6f; border-color: #6e2f2f; }
     [data-worker-mode] { font-size: 12px; color: var(--ink-dim); min-width: 90px; text-align: end; }
+    .locale-btn {
+      min-width: 56px; text-align: center; font-size: 12px; padding: 4px 10px;
+      border-radius: 6px; border: 1px solid var(--panel-edge); background: #0d1119;
+      color: var(--ink); cursor: pointer;
+    }
+    .locale-btn:hover { border-color: #3d4a6b; }
 
     /* panels: min-heights reserve final geometry BEFORE hydration */
     .panel {
@@ -117,25 +123,26 @@
       <span class="brand">SOVEREIGN<b>·</b>EDGE</span>
       <span data-status-pill data-phase="boot">boot</span>
       <span data-worker-mode>…</span>
+      <button data-locale-switch class="btn locale-btn" type="button" aria-label="switch language">عربي</button>
     </header>
 
     <main>
       <section id="hero" class="panel">
-        <h1>State off-thread. <b>Compute in WASM.</b> Paint only.</h1>
+        <h1><span data-i18n="hero_a">State off-thread.</span> <b data-i18n="hero_b">Compute in WASM.</b> <span data-i18n="hero_c">Paint only.</span></h1>
         <div class="sk l1"></div>
         <div class="sk l2"></div>
       </section>
 
       <section id="projects" class="panel">
         <!-- skeleton geometry == hydrated geometry (56px rows) -->
-        <div class="panel-head"><h2>Projects — المشاريع</h2><span class="hint">loading…</span></div>
+        <div class="panel-head"><h2 data-i18n="projects_title">Projects</h2><span class="hint" data-i18n="loading">loading…</span></div>
         <div class="sk-row"><div class="sk" style="width:64%"></div></div>
         <div class="sk-row"><div class="sk" style="width:48%"></div></div>
         <div class="sk-row"><div class="sk" style="width:56%"></div></div>
       </section>
 
       <section id="bench" class="panel">
-        <div class="panel-head"><h2>WASM Morph Bench</h2><span class="hint">arming…</span></div>
+        <div class="panel-head"><h2 data-i18n="bench_title">WASM Morph Bench</h2><span class="hint">arming…</span></div>
         <div class="bench-body">
           <canvas width="256" height="256" class="bench-canvas"></canvas>
           <div class="bench-side"><div class="sk" style="height:36px;width:120px"></div></div>

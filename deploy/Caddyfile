@@ -1,0 +1,58 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Caddyfile للنشر السيادي — المرحلة 7
+# - شهادات ACME تلقائية (Let's Encrypt) + HTTP/3 (QUIC) على نفس المنفذ 443.
+# - استبدل portfolio.example وapi.portfolio.example بنطاق المالك الفعلي.
+# - منفذ UDP 9443 (بوابة الحافة) لا يمر عبر Caddy إطلاقًا — يُفتح مباشرة
+#   في جدار الحماية:  ufw allow 9443/udp  (إلا إذا كان الإرسال محليًا).
+# ═══════════════════════════════════════════════════════════════════════════
+{
+	auto_https disable_redirects false
+	servers {
+		protocols h1 h2 h3
+	}
+}
+
+portfolio.example {
+	root * /var/www/portfolio
+	encode zstd gzip
+	header {
+		Cross-Origin-Opener-Policy same-origin
+		Cross-Origin-Embedder-Policy require-corp
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		Cache-Control "public, max-age=300, stale-while-revalidate=3600"
+	}
+	header /core.wasm Cache-Control "public, max-age=31536000, immutable"
+	header /sw.js Cache-Control "no-store"
+	try_files {path} /index.html
+	file_server
+}
+
+api.portfolio.example {
+	rate_limit {
+		zone api {
+			key {client_ip}
+			events 300
+			window 1m
+		}
+	}
+	@stream path /events
+	handle @stream {
+		reverse_proxy 127.0.0.1:8081 {
+			flush_interval -1
+			transport http {
+				read_timeout 0
+			}
+		}
+	}
+	handle {
+		reverse_proxy 127.0.0.1:8081 {
+			header_up X-Forwarded-Proto https
+		}
+	}
+}
+# ═══════════════════════════════════════════════════════════════════════════
+# /events يُعامل كمجرى SSE (flush فوري، بلا مهلة قراءة) — بقية المسارات
+# تمر عادية. الخنق هنا على حافة 300/دقيقة لكل IP فوق خنق التطبيق نفسه
+# (2/دقيقة على باب الدخول) — طبقتان مستقلتان.
+# ═══════════════════════════════════════════════════════════════════════════
