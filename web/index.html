@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sovereign Edge — Portfolio</title>
+  <meta name="description" content="Local-first portfolio: state lives in a SharedWorker, heavy compute in WASM, the main thread only paints." />
+  <link rel="modulepreload" href="./dist/boot.js" />
+  <style>
+    /* ---- critical CSS: every box below has a FIXED reserved geometry so
+       hydration can never shift layout (CLS = 0 by construction). ---- */
+    :root {
+      color-scheme: dark;
+      --bg: #0b0e14;
+      --panel: #11151f;
+      --panel-edge: #1d2433;
+      --ink: #e8e6e3;
+      --ink-dim: #9aa3b2;
+      --gold: #d4af37;
+      --row: 56px;               /* skeleton row == live row, exactly */
+      --hdr: 64px;
+      --hud: 36px;
+      font-size: 16px;
+    }
+    * { box-sizing: border-box; }
+    html { scrollbar-gutter: stable; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Arabic", sans-serif;
+      line-height: 1.5;
+    }
+    .wrap { max-width: 960px; margin: 0 auto; padding: 0 20px; }
+
+    /* header — static text ships in the HTML: zero shift, instant paint */
+    header.hdr { height: var(--hdr); display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--panel-edge); }
+    header.hdr .brand { font-weight: 700; letter-spacing: .04em; }
+    header.hdr .brand b { color: var(--gold); }
+    [data-status-pill] {
+      margin-inline-start: auto; font-size: 12px; padding: 3px 10px; border-radius: 999px;
+      border: 1px solid var(--panel-edge); color: var(--ink-dim); min-width: 72px; text-align: center;
+    }
+    [data-status-pill][data-phase="ready"] { color: #6fe38b; border-color: #2b5c39; }
+    [data-status-pill][data-phase="degraded"] { color: #f0c674; border-color: #6b5a2e; }
+    [data-status-pill][data-phase="fatal"] { color: #ef6f6f; border-color: #6e2f2f; }
+    [data-worker-mode] { font-size: 12px; color: var(--ink-dim); min-width: 90px; text-align: end; }
+
+    /* panels: min-heights reserve final geometry BEFORE hydration */
+    .panel {
+      background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 12px;
+      padding: 20px; margin: 24px 0; contain: layout paint;
+    }
+    .panel-head { display: flex; align-items: baseline; gap: 12px; min-height: 30px; }
+    .panel-head h2 { margin: 0; font-size: 20px; }
+    .panel-head .hint { color: var(--ink-dim); font-size: 12px; }
+
+    /* hero: brand line is real text (no shift); sub-lines are fixed bars */
+    #hero { min-height: 196px; }
+    #hero h1 { font-size: 34px; margin: 6px 0 16px; }
+    #hero h1 b { color: var(--gold); }
+    .sk {
+      border-radius: 6px; background: linear-gradient(90deg, #151a26 25%, #1c2331 50%, #151a26 75%);
+      background-size: 200% 100%; animation: shimmer 1.4s linear infinite;
+    }
+    #hero .sk.l1 { height: 14px; width: 72%; margin-bottom: 10px; }
+    #hero .sk.l2 { height: 14px; width: 46%; }
+    @keyframes shimmer { to { background-position: -200% 0; } }
+    @media (prefers-reduced-motion: reduce) { .sk { animation: none; } }
+
+    /* projects: form row + 3 skeleton rows == final rows (var(--row)) */
+    #projects { min-height: calc(30px + 48px + 3 * var(--row) + 64px); }
+    .p-form { display: flex; gap: 10px; height: 48px; align-items: center; margin: 8px 0; }
+    .p-form input, .p-title {
+      flex: 1; background: #0d1119; color: var(--ink); border: 1px solid var(--panel-edge);
+      border-radius: 8px; padding: 8px 12px; font: inherit; min-width: 0;
+    }
+    .btn {
+      background: #161c29; color: var(--ink); border: 1px solid var(--panel-edge);
+      border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer;
+    }
+    .btn:hover { border-color: var(--gold); }
+    .plist { list-style: none; margin: 0; padding: 0; }
+    .p-row {
+      display: flex; align-items: center; gap: 10px; min-height: var(--row);
+      border-top: 1px solid var(--panel-edge); position: relative;
+    }
+    .p-row .p-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--panel-edge); flex: none; }
+    .p-row .p-status { font-size: 12px; min-width: 58px; }
+    .p-row .p-status.live { color: #6fe38b; border-color: #2b5c39; }
+    .p-row .p-del { color: var(--ink-dim); padding: 8px 10px; }
+    .p-row.pending::after {
+      content: ""; position: absolute; inset-inline-end: -1px; top: 12px; bottom: 12px; width: 3px;
+      border-radius: 2px; background: var(--gold); animation: shimmer 1.4s linear infinite;
+    }
+    .sk-row { height: var(--row); border-top: 1px solid var(--panel-edge); display: flex; align-items: center; gap: 10px; }
+    .sk-row .sk { height: 18px; }
+    .toast { margin-top: 12px; font-size: 13px; color: #f0c674; min-height: 20px; }
+
+    /* bench: canvas + controls reserved up-front */
+    #bench { min-height: calc(30px + 256px + 40px); }
+    .bench-body { display: flex; gap: 20px; align-items: flex-start; margin-top: 12px; flex-wrap: wrap; }
+    .bench-canvas { width: 256px; height: 256px; border-radius: 10px; background: #0d1119; border: 1px solid var(--panel-edge); }
+    .bench-side { display: flex; flex-direction: column; gap: 12px; min-width: 240px; }
+    .bench-stat { color: var(--ink-dim); font-size: 13px; min-height: 60px; margin: 0; }
+
+    footer.hud {
+      height: var(--hud); display: flex; align-items: center; gap: 20px; overflow: hidden;
+      border-top: 1px solid var(--panel-edge); color: var(--ink-dim); font-size: 12px;
+      font-variant-numeric: tabular-nums; white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hdr">
+      <span class="brand">SOVEREIGN<b>·</b>EDGE</span>
+      <span data-status-pill data-phase="boot">boot</span>
+      <span data-worker-mode>…</span>
+    </header>
+
+    <main>
+      <section id="hero" class="panel">
+        <h1>State off-thread. <b>Compute in WASM.</b> Paint only.</h1>
+        <div class="sk l1"></div>
+        <div class="sk l2"></div>
+      </section>
+
+      <section id="projects" class="panel">
+        <!-- skeleton geometry == hydrated geometry (56px rows) -->
+        <div class="panel-head"><h2>Projects — المشاريع</h2><span class="hint">loading…</span></div>
+        <div class="sk-row"><div class="sk" style="width:64%"></div></div>
+        <div class="sk-row"><div class="sk" style="width:48%"></div></div>
+        <div class="sk-row"><div class="sk" style="width:56%"></div></div>
+      </section>
+
+      <section id="bench" class="panel">
+        <div class="panel-head"><h2>WASM Morph Bench</h2><span class="hint">arming…</span></div>
+        <div class="bench-body">
+          <canvas width="256" height="256" class="bench-canvas"></canvas>
+          <div class="bench-side"><div class="sk" style="height:36px;width:120px"></div></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="hud">
+      <span data-hud-fps>fps —</span>
+      <span data-hud-worker>worker idle</span>
+      <span data-hud-hash>state hash —</span>
+    </footer>
+  </div>
+  <script type="module" src="./dist/boot.js"></script>
+</body>
+</html>

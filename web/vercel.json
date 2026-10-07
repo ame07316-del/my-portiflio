@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "outputDirectory": ".",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "cross-origin-opener-policy", "value": "same-origin" },
+        { "key": "cross-origin-embedder-policy", "value": "require-corp" },
+        { "key": "x-content-type-options", "value": "nosniff" }
+      ]
+    },
+    {
+      "source": "/sw.js",
+      "headers": [{ "key": "cache-control", "value": "no-store" }]
+    }
+  ],
+  "rewrites": [{ "source": "/sw.js", "destination": "/dist/sw.js" }]
+}

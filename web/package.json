@@ -1,0 +1,18 @@
+{
+  "name": "portfolio-edge-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sovereign Edge UI — vanilla TypeScript + Web Components, SharedWorker state, CRDT local-first, hand-assembled WASM. Zero runtime dependencies.",
+  "scripts": {
+    "build:wasm": "node tools/wasm-assemble.mjs",
+    "build:ts": "tsc -p tsconfig.json",
+    "build": "npm run build:wasm && npm run build:ts",
+    "test": "npm run build && node --test dist/tests/*.test.js",
+    "serve": "node tools/serve.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^20.0.0"
+  }
+}
