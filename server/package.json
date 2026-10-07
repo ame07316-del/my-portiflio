@@ -11,9 +11,11 @@
     "test": "npm run build && node --test dist/server/src/tests/*.test.js",
     "start": "npm run build && node dist/server/src/control-plane.js"
   },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.8"
+  },
   "devDependencies": {
     "typescript": "^5.6.0",
-    "@types/node": "^20.0.0",
-    "@electric-sql/pglite": "^0.5.8"
+    "@types/node": "^20.0.0"
   }
 }
