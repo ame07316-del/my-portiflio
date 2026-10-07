@@ -42,16 +42,27 @@ jobs:
         with: { node-version: 22, cache: npm, cache-dependency-path: server/package-lock.json }
       - run: npm ci
       - run: npm run build
-      - run: node --test dist/server/src/tests/*.test.js
-      - name: Load storm (embedded engine)
+      - name: "TESTS (diag: base64 notice annotation)"
         run: |
-          SEED_DEMO=1 HTTP_PORT=8081 node dist/server/src/control-plane.js &
+          node --test dist/server/src/tests/*.test.js > /tmp/t.log 2>&1; RC=$?
+          tail -c 3000 /tmp/t.log
+          base64 -w0 /tmp/t.log | tail -c 60000 > /tmp/t.b64
+          echo "::notice title=DIAG-SERVER-TESTS-rc=$RC::$(cat /tmp/t.b64)"
+          exit $RC
+      - name: "Load storm (diag: base64 notice annotation)"
+        run: |
+          SEED_DEMO=1 HTTP_PORT=8081 node dist/server/src/control-plane.js > /tmp/cp.log 2>&1 &
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:8081/healthz > /dev/null && break
             sleep 1
           done
-          node scripts/load-test.mjs
-          kill %1
+          node scripts/load-test.mjs > /tmp/storm.log 2>&1
+          RC=$?
+          kill %1 2>/dev/null
+          tail -c 3000 /tmp/storm.log
+          { echo '== control-plane.log (tail)'; tail -c 40000 /tmp/cp.log; echo; echo '== load-test.log (tail)'; tail -c 40000 /tmp/storm.log; } | base64 -w0 | tail -c 60000 > /tmp/storm.b64
+          echo "::notice title=DIAG-STORM-rc=$RC::$(cat /tmp/storm.b64)"
+          exit $RC
   e2e:
     name: E2E · Playwright (Chromium)
     runs-on: ubuntu-latest
@@ -64,7 +75,10 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test
+      - name: "E2E (diag: capture output to step summary)"
+        run: |
+          npx playwright test 2>&1 | tee /tmp/e.log | tail -c 3000
+          { echo; echo '### diag: e2e tail (15000 chars)'; tail -c 15000 /tmp/e.log; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: failure()
         with: { name: playwright-report, path: web/playwright-report/, retention-days: 7 }
