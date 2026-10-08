@@ -25,6 +25,29 @@ const __diag = (s: string): void => {
 };
 (globalThis as { __wsdiag?: (s: string) => void }).__wsdiag = __diag;
 __diag('entry-start');
+// TEMP-DIAG (revert): BroadcastChannel breadcrumbs — observable from the page
+// (self.postMessage from a SharedWorker is not reliably visible to clients).
+const __bc: { postMessage: (s: string) => void } | null = (() => {
+  try {
+    const BC = (globalThis as unknown as { BroadcastChannel?: new (n: string) => { postMessage: (s: string) => void; onmessage: ((ev: { data: unknown }) => void) | null } }).BroadcastChannel;
+    if (BC === undefined) return null;
+    const c = new BC('sovd-wire');
+    c.onmessage = (ev) => {
+      if (ev.data === 'ping') c.postMessage('ms-alive');
+    };
+    return c;
+  } catch {
+    return null;
+  }
+})();
+const __bclog = (s: string): void => {
+  try {
+    __bc?.postMessage(s);
+  } catch {
+    /* diagnostics only */
+  }
+};
+__bclog('ms-entry');
 self.addEventListener('error', (e: ErrorEvent) => __diag('worker-error: ' + (e.message || 'unknown')));
 self.addEventListener('unhandledrejection', (e: PromiseRejectionEvent) =>
   __diag('unhandled-rejection: ' + String((e.reason as { stack?: string })?.stack ?? e.reason).slice(0, 300)),
