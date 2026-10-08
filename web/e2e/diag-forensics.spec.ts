@@ -1,7 +1,7 @@
-// TEMPORARY diagnostic — removed once E2E is green. v8: port-driven import
-// chain inside a SharedWorker (no TLA top-level, no reliance on
-// self.postMessage). After the chain imports the real worker, a fresh
-// connection sends Hello and reports a reply.
+// TEMPORARY diagnostic — removed once E2E is green. v9: isolate the exact
+// worker-port mechanism that fails — (1) onmessage + plain reply, (2)
+// addEventListener+start + plain reply, (3) onmessage + TRANSFERRED reply —
+// then the real-worker chain with port-channel CRUMBs.
 import { writeFileSync } from 'node:fs';
 import { test } from '@playwright/test';
 
@@ -19,11 +19,10 @@ test('diag: boot forensics', async ({ page }) => {
   const info: Record<string, unknown> = {};
   info.pill = await page.evaluate(() => document.querySelector('[data-status-pill]')?.textContent ?? 'n/a');
 
-  // --- control: minimal blob module SW, port pong (proven pattern) ---
-  info.controlPong = await page.evaluate(async () => {
+  // control A: onmessage + plain reply (proven in earlier rounds)
+  info.ctlOnmsgPlain = await page.evaluate(async () => {
     const code = 'self.onconnect = (ev) => { const p = ev.ports[0]; p.onmessage = (e) => p.postMessage("pong:" + String(e.data)); };\n';
-    const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
-    const sw = new SharedWorker(url, { type: 'module', name: 'ctl-' + Math.random() });
+    const sw = new SharedWorker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })), { type: 'module', name: 'a-' + Math.random() });
     const port = sw.port;
     return await new Promise<string>((resolve) => {
       const t = setTimeout(() => resolve('timeout-2s'), 2000);
@@ -33,7 +32,46 @@ test('diag: boot forensics', async ({ page }) => {
     });
   });
 
-  // --- port-driven import chain + reconnect Hello ---
+  // control B: addEventListener + start + plain reply (app's attachPort pattern)
+  info.ctlALPlain = await page.evaluate(async () => {
+    const code =
+      'self.onconnect = (ev) => {\n' +
+      '  const p = ev.ports[0];\n' +
+      '  p.addEventListener("message", (e) => p.postMessage("pong-al:" + String(e.data)));\n' +
+      '  p.start();\n' +
+      '};\n';
+    const sw = new SharedWorker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })), { type: 'module', name: 'b-' + Math.random() });
+    const port = sw.port;
+    return await new Promise<string>((resolve) => {
+      const t = setTimeout(() => resolve('timeout-2s'), 2000);
+      port.onmessage = (ev) => { clearTimeout(t); resolve('reply: ' + JSON.stringify(ev.data)); };
+      port.start();
+      port.postMessage('hi');
+    });
+  });
+
+  // control C: onmessage + TRANSFERRED ArrayBuffer reply (worker's Client.send pattern)
+  info.ctlOnmsgTransfer = await page.evaluate(async () => {
+    const code =
+      'self.onconnect = (ev) => {\n' +
+      '  const p = ev.ports[0];\n' +
+      '  p.onmessage = (e) => { const b = new ArrayBuffer(16); p.postMessage({ bin: b }, [b]); };\n' +
+      '};\n';
+    const sw = new SharedWorker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })), { type: 'module', name: 'c-' + Math.random() });
+    const port = sw.port;
+    return await new Promise<string>((resolve) => {
+      const t = setTimeout(() => resolve('timeout-2s'), 2000);
+      port.onmessage = (ev) => {
+        clearTimeout(t);
+        const d = ev.data as { bin?: ArrayBuffer };
+        resolve(d && d.bin ? 'reply bin len=' + d.bin.byteLength : 'reply: ' + JSON.stringify(ev.data));
+      };
+      port.start();
+      port.postMessage('hi');
+    });
+  });
+
+  // --- chain: import all graph modules in-worker, then reconnect Hello with CRUMB capture ---
   info.chain = await page.evaluate(async () => {
     const base = location.origin;
     const targets = [
@@ -53,10 +91,9 @@ test('diag: boot forensics', async ({ page }) => {
       'const targets = ' + JSON.stringify(targets) + ';\n' +
       'const trim = (t) => t.slice(' + base.length + ');\n' +
       'const race = (p) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("import-hung-2500ms")), 2500))]);\n' +
-      'let active = null;\n' +
       'self.onconnect = (ev) => {\n' +
       '  const p = ev.ports[0];\n' +
-      '  p.onmessage = (e) => { if (e.data === "go") { active = p; void run(p); } };\n' +
+      '  p.onmessage = (e) => { if (e.data === "go") void run(p); };\n' +
       '};\n' +
       'async function run(p) {\n' +
       '  for (const t of targets) {\n' +
@@ -66,41 +103,29 @@ test('diag: boot forensics', async ({ page }) => {
       '  p.postMessage("done");\n' +
       '}\n';
     const blobUrl = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
-    const name = 'chain8-' + Date.now();
-
-    const mkConn = (sw: SharedWorker) => {
-      const msgs: string[] = [];
-      let reply = 'none';
-      sw.port.onmessage = (ev) => {
-        if (typeof ev.data === 'string') { if (msgs.length < 60) msgs.push(ev.data.slice(0, 200)); }
-        else if (ev.data && (ev.data as { bin?: ArrayBuffer }).bin) reply = 'reply len=' + (ev.data as { bin: ArrayBuffer }).bin.byteLength;
-      };
-      sw.port.start();
-      return { msgs, getReply: () => reply };
-    };
+    const name = 'chain9-' + Date.now();
 
     const sw1 = new SharedWorker(blobUrl, { type: 'module', name });
-    const c1 = mkConn(sw1);
+    const chainMsgs: string[] = [];
+    sw1.port.onmessage = (ev) => { if (typeof ev.data === 'string' && chainMsgs.length < 60) chainMsgs.push(ev.data.slice(0, 200)); };
+    sw1.port.start();
     sw1.port.postMessage('go');
-    // wait for done (or 13s); if the first connection is dead, reconnect after 3s of silence
     let done = false;
-    let c2 = null;
     const t0 = Date.now();
     while (Date.now() - t0 < 13000) {
       await new Promise((r) => setTimeout(r, 200));
-      if (c1.msgs.includes('done')) { done = true; break; }
-      if (Date.now() - t0 > 3000 && c1.msgs.length === 0 && c2 === null) {
-        const sw2 = new SharedWorker(blobUrl, { type: 'module', name });
-        c2 = mkConn(sw2);
-        sw2.port.postMessage('go');
-      }
+      if (chainMsgs.includes('done')) { done = true; break; }
     }
-    const chainMsgs = c1.msgs.length > 0 ? c1.msgs : c2?.msgs ?? [];
-    // reconnect Hello: fresh connection → real onconnect handler (armed after chain)
-    let helloReply = 'no-worker-state';
+    let hello: { reply: string; msgs: string[] } = { reply: 'chain-not-done', msgs: [] };
     if (done) {
       const sw3 = new SharedWorker(blobUrl, { type: 'module', name });
-      const c3 = mkConn(sw3);
+      const c3msgs: string[] = [];
+      let reply = 'none';
+      sw3.port.onmessage = (ev) => {
+        if (typeof ev.data === 'string') { if (c3msgs.length < 40) c3msgs.push(ev.data.slice(0, 200)); }
+        else if (ev.data && (ev.data as { bin?: ArrayBuffer }).bin) reply = 'reply len=' + (ev.data as { bin: ArrayBuffer }).bin.byteLength;
+      };
+      sw3.port.start();
       const proto = (await import(new URL('./dist/core/protocol.js', location.href).href)) as unknown as {
         BinWriter: new (n: number) => { u32(n: number): unknown; finish(): Uint8Array };
         beginFrame(w: unknown, tag: number, seq: number): { u32(n: number): unknown };
@@ -111,9 +136,9 @@ test('diag: boot forensics', async ({ page }) => {
       const frame = w.finish();
       sw3.port.postMessage({ bin: frame.buffer }, [frame.buffer]);
       await new Promise((r) => setTimeout(r, 2500));
-      helloReply = c3.getReply();
+      hello = { reply, msgs: c3msgs };
     }
-    return JSON.stringify({ done, reconnected: c2 !== null, chainMsgs, helloReply });
+    return JSON.stringify({ done, chainMsgs, hello });
   });
 
   const b64 = Buffer.from(JSON.stringify({ info, logs })).toString('base64');

@@ -69,16 +69,33 @@ if ('onconnect' in scope) {
       const wire: WirePort = {
         postMessage: (msg: unknown, transfer?: Transferable[]) => {
           __diag('worker-send');
+          try {
+            port.postMessage('CRUMB worker-send'); // TEMP-DIAG: port-channel breadcrumb
+          } catch {
+            /* crumb only */
+          }
           if (transfer !== undefined) port.postMessage(msg, transfer);
           else port.postMessage(msg);
         },
         addEventListener: (type: 'message', h: (mev: MessageEvent) => void) => {
           port.addEventListener(type, (mev) => {
             __diag('msg-received');
+            try {
+              port.postMessage('CRUMB msg-received'); // TEMP-DIAG: port-channel breadcrumb
+            } catch {
+              /* crumb only */
+            }
             h(mev);
           });
         },
-        start: () => port.start(),
+        start: () => {
+          try {
+            port.postMessage('CRUMB start-called'); // TEMP-DIAG: port-channel breadcrumb
+          } catch {
+            /* crumb only */
+          }
+          port.start();
+        },
       };
       node.attachPort(wire);
       __diag('port-attached');
