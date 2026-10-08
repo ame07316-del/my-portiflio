@@ -1,5 +1,6 @@
 // TEMPORARY diagnostic — removed once E2E is green. Captures why the
-// SharedWorker handshake never completes in CI Chromium.
+// SharedWorker handshake never completes in CI Chromium (v5: worker
+// breadcrumbs via sw.onmessage + per-module dedicated-worker import test).
 import { writeFileSync } from 'node:fs';
 import { test } from '@playwright/test';
 
@@ -13,76 +14,19 @@ test('diag: boot forensics', async ({ page }) => {
   page.on('crash', () => push('[page crashed]'));
 
   await page.goto('/index.html');
-  await page.waitForTimeout(5000);
+  await page.waitForTimeout(4000);
 
-  const info = await page.evaluate(async () => {
-    const out: Record<string, unknown> = {};
-    out.sab = typeof SharedArrayBuffer;
-    out.coi = Boolean(window.crossOriginIsolated);
-    out.pill = document.querySelector('[data-status-pill]')?.textContent ?? 'n/a';
-    out.workerMode = document.querySelector('[data-worker-mode]')?.textContent ?? 'n/a';
-    try { out.fetchWorkerScript = (await fetch('./dist/worker/state-worker.js')).status; } catch (e) { out.fetchWorkerScript = String(e); }
-    try { out.fetchWasm = (await fetch('./dist/core.wasm')).status; } catch (e) { out.fetchWasm = String(e); }
-    return out;
-  });
+  const info: Record<string, unknown> = {};
+  info.pill = await page.evaluate(() => document.querySelector('[data-status-pill]')?.textContent ?? 'n/a');
 
-  // --- direct port probe 1: trivial inline echo SharedWorker ---
-  info.trivialSw = await page.evaluate(async () => {
-    try {
-      const code = `self.onconnect = (ev) => { const p = ev.ports[0]; p.onmessage = (e) => p.postMessage('pong:' + (e.data && e.data.bin ? e.data.bin.byteLength : String(e.data))); };`;
-      const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
-      const sw = new SharedWorker(url, { name: 'trivial-' + Date.now() });
-      const port = sw.port;
-      return await new Promise<string>((resolve) => {
-        const t = setTimeout(() => resolve('timeout-no-reply-in-4s'), 4000);
-        sw.onerror = (e) => { clearTimeout(t); resolve('sw-error: ' + (e.message || e.type || 'err')); };
-        port.onmessage = (ev) => { clearTimeout(t); resolve('reply: ' + JSON.stringify(ev.data)); };
-        port.start();
-        port.postMessage({ bin: new ArrayBuffer(16) });
-      });
-    } catch (e) { return 'ctor-threw: ' + String(e); }
-  });
-
-  // --- direct port probe 2: OUR worker script, raw Hello frame;
-  //     also listen on sw.onmessage (dedicated-path miswire detector) ---
-  info.ourSwDirect = await page.evaluate(async () => {
-    try {
-      const sw = new SharedWorker('./dist/worker/state-worker.js', { type: 'module', name: 'direct-' + Date.now() });
-      const port = sw.port;
-      const protoUrl = new URL('./dist/core/protocol.js', location.href).href;
-      const proto = (await import(protoUrl)) as unknown as {
-        BinWriter: new (n: number) => { u32(n: number): unknown; finish(): Uint8Array };
-        beginFrame(w: unknown, tag: number, seq: number): { u32(n: number): unknown };
-        Tag: { Hello: number };
-      };
-      const w = new proto.BinWriter(16);
-      proto.beginFrame(w, proto.Tag.Hello, 1).u32(0);
-      const frame = w.finish();
-      return await new Promise<string>((resolve) => {
-        let done = false;
-        const finish = (s: string) => { if (!done) { done = true; clearTimeout(t); resolve(s); } };
-        const t = setTimeout(() => finish('timeout-no-reply-in-8s'), 8000);
-        sw.onerror = (e) => finish('sw-error: ' + (e.message || e.type || 'err'));
-        sw.onmessage = (ev) => finish('via-sw-onmessage (dedicated-path miswire!): ' + JSON.stringify(ev.data)?.slice(0, 120));
-        port.onmessage = (ev) => {
-          const d = ev.data as { bin?: ArrayBuffer };
-          const bin = d && d.bin ? d.bin : null;
-          finish(bin ? `reply len=${bin.byteLength}` : 'reply non-bin: ' + JSON.stringify(ev.data));
-        };
-        port.start();
-        port.postMessage({ bin: frame.buffer }, [frame.buffer]);
-      });
-    } catch (e) { return 'ctor-threw: ' + String(e); }
-  });
-
-  // --- probe 4: MINIMAL module SharedWorker (onconnect at top of module) ---
+  // --- control: minimal module SharedWorker still works? ---
   info.minimalModuleSw = await page.evaluate(async () => {
     const code = 'self.onconnect = (ev) => { const p = ev.ports[0]; p.onmessage = (e) => p.postMessage("pong"); };\n';
     const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
     const sw = new SharedWorker(url, { type: 'module', name: 'minmod-' + Date.now() });
     const port = sw.port;
     return await new Promise<string>((resolve) => {
-      const t = setTimeout(() => resolve('timeout-no-reply-in-5s'), 5000);
+      const t = setTimeout(() => resolve('timeout-no-reply-in-4s'), 4000);
       sw.onerror = (e) => { clearTimeout(t); resolve('sw-error: ' + (e.message || 'err')); };
       port.onmessage = (ev) => { clearTimeout(t); resolve('reply: ' + JSON.stringify(ev.data)); };
       port.start();
@@ -90,54 +34,65 @@ test('diag: boot forensics', async ({ page }) => {
     });
   });
 
-  // --- probe 5: OUR script — conn#1 (immediate), then conn#2 (reconnect, same name) ---
-  info.ourSwReconnect = await page.evaluate(async () => {
-    const name = 'recon-' + Date.now();
+  // --- our worker: breadcrumb timeline + Hello ---
+  info.ourSwBreadcrumb = await page.evaluate(async () => {
+    const crumbs: string[] = [];
+    const sw = new SharedWorker('./dist/worker/state-worker.js', { type: 'module', name: 'bc-' + Date.now() });
+    sw.onmessage = (ev) => { if (crumbs.length < 60 && typeof ev.data === 'string' && ev.data.startsWith('DIAG-WS ')) crumbs.push(ev.data.slice(8)); };
+    sw.onerror = (e) => { if (crumbs.length < 60) crumbs.push('sw-error: ' + (e.message || e.type || 'err')); };
+    const port = sw.port;
+    let reply = 'none';
+    port.onmessage = (ev) => {
+      const d = ev.data as { bin?: ArrayBuffer };
+      if (d && d.bin) reply = 'reply len=' + d.bin.byteLength;
+    };
     const protoUrl = new URL('./dist/core/protocol.js', location.href).href;
     const proto = (await import(protoUrl)) as unknown as {
       BinWriter: new (n: number) => { u32(n: number): unknown; finish(): Uint8Array };
       beginFrame(w: unknown, tag: number, seq: number): { u32(n: number): unknown };
       Tag: { Hello: number };
     };
-    const mkHello = (): ArrayBuffer => {
-      const w = new proto.BinWriter(16);
-      proto.beginFrame(w, proto.Tag.Hello, 1).u32(0);
-      const frame = w.finish();
-      return frame.buffer as ArrayBuffer;
-    };
-    const probeConn = (sw: SharedWorker, helloBuf: ArrayBuffer, ms: number): Promise<string> =>
-      new Promise((resolve) => {
-        let done = false;
-        const fin = (s: string) => { if (!done) { done = true; clearTimeout(t); resolve(s); } };
-        const t = setTimeout(() => fin('timeout-' + ms + 'ms'), ms);
-        sw.onerror = (e) => fin('sw-error: ' + (e.message || 'err'));
-        sw.port.onmessage = (ev) => {
-          const d = ev.data as { bin?: ArrayBuffer };
-          fin('reply len=' + (d?.bin ? d.bin.byteLength : 'n/a'));
-        };
-        sw.port.start();
-        sw.port.postMessage({ bin: helloBuf }, [helloBuf]);
-      });
-    const sw1 = new SharedWorker('./dist/worker/state-worker.js', { type: 'module', name });
-    const conn1 = await probeConn(sw1, mkHello(), 3000);
-    const sw2 = new SharedWorker('./dist/worker/state-worker.js', { type: 'module', name });
-    const conn2 = await probeConn(sw2, mkHello(), 3000);
-    return JSON.stringify({ conn1, conn2 });
+    await new Promise((r) => setTimeout(r, 300)); // let the module start; connection already made at ctor
+    port.start();
+    const w = new proto.BinWriter(16);
+    proto.beginFrame(w, proto.Tag.Hello, 1).u32(0);
+    const frame = w.finish();
+    port.postMessage({ bin: frame.buffer }, [frame.buffer]);
+    await new Promise((r) => setTimeout(r, 5500));
+    return JSON.stringify({ crumbs, reply });
   });
 
-  // --- probe 3: import the worker module graph at PAGE level (browser env) ---
-  info.pageLevelImport = await page.evaluate(async () => {
-    const url = new URL('./dist/worker/state-worker.js', location.href).href;
-    const t = setTimeout(() => { /* keep going */ }, 0);
-    try {
-      await Promise.race([
-        import(url),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('import-hung-6s')), 6000)),
-      ]);
-      return 'import-ok';
-    } catch (e) {
-      return 'import-failed: ' + String(e).slice(0, 160);
-    } finally { clearTimeout(t); }
+  // --- per-module import test in a DEDICATED module worker (errors surface) ---
+  info.dedicatedImports = await page.evaluate(async () => {
+    const files = [
+      '/dist/core/bounds.js',
+      '/dist/core/protocol.js',
+      '/dist/core/validate.js',
+      '/dist/core/crdt.js',
+      '/dist/core/ring.js',
+      '/dist/core/storage.js',
+      '/dist/core/idb.js',
+      '/dist/runtime/wasm-core.js',
+      '/dist/worker/sync-adapter.js',
+      '/dist/worker/state-node.js',
+      '/dist/worker/state-worker.js',
+    ];
+    const code =
+      'self.onmessage = async (e) => { for (const f of e.data) { try { await import(f); postMessage({ file: f, ok: true }); } catch (err) { postMessage({ file: f, err: String((err && err.message) || err).slice(0, 160) }); } } postMessage({ done: true }); };';
+    const results: Array<Record<string, unknown>> = [];
+    let loadError = '';
+    const w = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })), { type: 'module' });
+    w.onerror = (e) => { loadError = e.message || 'worker-load-error'; };
+    w.onmessage = (ev) => {
+      const d = ev.data as Record<string, unknown> | string;
+      if (typeof d === 'string') { if (d.startsWith('DIAG-WS ')) results.push({ crumb: d.slice(8) }); return; }
+      if (d && d.file) results.push({ file: String(d.file).split('/').pop(), ok: d.ok, err: d.err as string | undefined });
+      if (d && d.done) { (w as unknown as { terminate: () => void }).terminate(); }
+    };
+    w.postMessage(files);
+    await new Promise((r) => setTimeout(r, 8000));
+    w.terminate();
+    return JSON.stringify({ loadError, results });
   });
 
   const b64 = Buffer.from(JSON.stringify({ info, logs })).toString('base64');

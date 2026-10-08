@@ -21,6 +21,11 @@ import type { StateMeta, StateStorage } from './storage.js';
 const DB_NAME = 'portfolio-edge';
 const DB_VERSION = 1;
 
+// TEMP-DIAG (revert before merge): breadcrumb hook (set by the worker shell).
+const __wsdiag = (s: string): void => {
+  (globalThis as { __wsdiag?: (s: string) => void }).__wsdiag?.(s);
+};
+
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function req<T>(r: IDBRequest<T>): Promise<T> {
@@ -48,9 +53,18 @@ export function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv', { keyPath: 'k' });
       if (!db.objectStoreNames.contains('oplog')) db.createObjectStore('oplog', { keyPath: 'opId' });
     };
-    open.onsuccess = () => resolve(open.result);
-    open.onerror = () => reject(open.error ?? new Error('IndexedDB open failed'));
-    open.onblocked = () => reject(new Error('IndexedDB open blocked by another tab'));
+    open.onsuccess = () => {
+      __wsdiag('idb-open-ok');
+      resolve(open.result);
+    };
+    open.onerror = () => {
+      __wsdiag('idb-open-err: ' + String(open.error));
+      reject(open.error ?? new Error('IndexedDB open failed'));
+    };
+    open.onblocked = () => {
+      __wsdiag('idb-blocked');
+      reject(new Error('IndexedDB open blocked by another tab'));
+    };
   });
   return dbPromise;
 }
