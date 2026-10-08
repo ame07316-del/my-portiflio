@@ -21,11 +21,6 @@ import { WASM_MEMORY_BUDGET_BYTES } from '../core/bounds.js';
 
 const PAGE = 65536;
 
-// TEMP-DIAG (revert before merge): breadcrumb hook (set by the worker shell).
-const __wsdiag = (s: string): void => {
-  (globalThis as { __wsdiag?: (s: string) => void }).__wsdiag?.(s);
-};
-
 export class WasmCore {
   readonly instance: WebAssembly.Instance;
   #u8: Uint8Array;
@@ -39,12 +34,9 @@ export class WasmCore {
   }
 
   static async fromFetch(url: string): Promise<WasmCore> {
-    __wsdiag('wasm-fetch-start');
     const res = await fetch(url);
-    __wsdiag(`wasm-fetch-${res.status} ct=${res.headers.get('content-type')}`);
     if (!res.ok) throw new Error(`wasm fetch failed: ${res.status}`);
     const { instance } = await WebAssembly.instantiateStreaming(res);
-    __wsdiag('wasm-ok');
     return new WasmCore(instance);
   }
 

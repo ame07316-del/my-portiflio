@@ -90,9 +90,9 @@ export function connectStore(initialPort: WirePort, opts: { ring?: SharedArrayBu
   let opCounter = 0;
   let attached = false;
   // True once the worker has proven it can materialize SAB frames (the
-  // boot-time handoff probe). In realms where it cannot, SAB-carrying
-  // frames are dropped AND can poison the state port — so bench (the only
-  // remaining SAB sender) stays disabled there.
+  // post-handshake handoff probe). In realms where the probe fails, bench
+  // (the only SAB sender) stays disabled rather than risking a silently
+  // dropped frame.
   let sandboxCapable = false;
   // The live state port. Reconnectable: some Chromium builds lose the
   // onconnect of a SharedWorker connection made while the module graph is
@@ -120,21 +120,12 @@ export function connectStore(initialPort: WirePort, opts: { ring?: SharedArrayBu
     publish();
     if (tag === Tag.Snapshot && !attached) {
       attached = true;
-      clearTimeout(helloRetry);
       opts.events?.onReady?.(clientId.peek());
     }
   }
 
   const onMsg = (ev: MessageEvent): void => {
-    const data = ev.data as { bin?: ArrayBuffer | Uint8Array } | ArrayBuffer | Uint8Array | string;
-    // TEMP-DIAG (revert): forward worker CRUMBs + log raw inbound events
-    if (typeof data === 'string') {
-      console.log(`[sovd] main-evt string: ${data.slice(0, 160)}`);
-      return;
-    }
-    console.log(
-      `[sovd] main-evt ${data !== null && typeof data === 'object' && 'bin' in data ? 'obj bin=' + ((data as { bin: unknown }).bin instanceof ArrayBuffer ? (data as { bin: ArrayBuffer }).bin.byteLength : String(typeof (data as { bin: unknown }).bin)) : String(typeof data)}`,
-    );
+    const data = ev.data as { bin?: ArrayBuffer | Uint8Array } | ArrayBuffer | Uint8Array;
     // Realm-agnostic: worker→page buffers cross a structured-clone boundary.
     const isAB = (x: unknown): x is ArrayBuffer =>
       x instanceof ArrayBuffer ||
@@ -149,20 +140,15 @@ export function connectStore(initialPort: WirePort, opts: { ring?: SharedArrayBu
         : data !== null && typeof data === 'object' && 'bin' in data && isAB(data.bin)
           ? new Uint8Array(data.bin)
           : null;
-    if (raw === null) {
-      console.log('[sovd] main-drop: envelope null'); // TEMP-DIAG (revert)
-      return;
-    }
+    if (raw === null) return;
     let r: BinReader;
     let header: { tag: number; seq: number };
     try {
       r = new BinReader(raw);
       header = readHeader(r);
     } catch {
-      console.log('[sovd] main-drop: parse fail len=' + raw.length); // TEMP-DIAG (revert)
       return; // drop malformed frames
     }
-    console.log(`[sovd] main-frame tag=${header.tag} seq=${header.seq}`); // TEMP-DIAG (revert)
     switch (header.tag) {
       case Tag.Ack: {
         const id = r.u32();
@@ -217,38 +203,21 @@ export function connectStore(initialPort: WirePort, opts: { ring?: SharedArrayBu
   }
   bindPort(activePort);
 
-  // Hello — ALWAYS plain (transferred ArrayBuffer, never a SAB). In some
-  // Chromium worker realms a SAB frame is dropped on receipt and poisons
-  // the port, which would strand the whole handshake; the ring is
-  // delivered separately (see spawnStateWorker.handoffRing).
+  // Hello — plain (transferred ArrayBuffer, never a SAB). Keeping the
+  // handshake dependency-free makes it robust in restricted worker realms;
+  // the telemetry ring SAB is delivered separately after the handshake
+  // (see spawnStateWorker.handoffRing), which also proves SAB capability.
   function sendHello(): void {
     const w = new BinWriter(16);
     beginFrame(w, Tag.Hello, ++seq).u32(0);
-    const helloFrame = w.finish();
-    console.log(`[sovd] main-sent Hello seq=${seq} len=${helloFrame.length}`); // TEMP-DIAG (revert)
-    try {
-      send(helloFrame);
-    } catch (e) {
-      console.log('[sovd] main-sent Hello THREW: ' + String(e).slice(0, 200)); // TEMP-DIAG (revert)
-      throw e;
-    }
+    send(w.finish());
   }
   sendHello();
 
-  // Handshake resilience: in some Chromium worker realms the SAB envelope
-  // cannot be materialized across the port and the frame is dropped
-  // silently. The ring is telemetry-only — if no handshake arrives, retry
-  // the Hello plain (transferred, no SAB) so the UI still reaches ready.
-  const helloRetry = setTimeout(() => {
-    if (!attached) {
-      console.log('[sovd] main-hello-retry (still not attached at 1s)'); // TEMP-DIAG (revert)
-      const w2 = new BinWriter(16);
-      beginFrame(w2, Tag.Hello, ++seq).u32(0);
-      send(w2.finish());
-    } else {
-      console.log('[sovd] main-hello-retry: already attached, skip'); // TEMP-DIAG (revert)
-    }
-  }, 1000);
+  // Handshake resilience lives in boot.ts: if no handshake lands, the
+  // watchdog re-opens fresh connections (SharedWorker → dedicated Worker →
+  // DEGRADE). A plain Hello re-send on the same port is useless when the
+  // port itself is dead, which is the failure mode being recovered from.
 
   function pushPending(opId: number): void {
     batch(() => {

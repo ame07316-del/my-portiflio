@@ -1,10 +1,18 @@
 /**
  * worker/state-worker.ts — thin browser shell around the StateNode engine.
  *
- * Runs as a SharedWorker (one sovereign replica shared by all tabs) with a
- * dedicated-Worker fallback. All logic lives in state-node.ts, which is
- * unit/integration-tested in plain Node — this file only wires platform
- * globals (ports, IndexedDB storage, wasm fetch) to the engine.
+ * Runs as a SharedWorker (one sovereign replica shared by all tabs of the
+ * origin — the browser's answer to a local replication server). Falls back
+ * to a dedicated module Worker where SharedWorker is unavailable.
+ *
+ * All logic lives in state-node.ts, which is unit/integration-tested in
+ * plain Node — this file only wires platform globals (ports, IndexedDB
+ * storage, wasm fetch) to the engine.
+ *
+ * Note: worker CONSTRUCTION (new SharedWorker/Worker) is owned by the
+ * classic inline launcher in index.html — some Chromium builds silently
+ * drop worker constructions issued from a module-script context in
+ * cross-origin-isolated pages.
  *
  * @complexity O(1) wiring; boot cost is in StateNode.boot (see there).
  */
@@ -13,45 +21,6 @@ import { StateNode, type WirePort } from './state-node.js';
 import { idbStorage } from '../core/idb.js';
 import { HttpSyncAdapter, MockSyncAdapter, type SyncAdapter } from './sync-adapter.js';
 import { WasmCore } from '../runtime/wasm-core.js';
-
-// TEMP-DIAG (revert before merge): breadcrumb trail via self.postMessage →
-// clients receive it as SharedWorker.onmessage. Locates the silent failure.
-const __diag = (s: string): void => {
-  try {
-    (self as unknown as { postMessage?: (m: string) => void }).postMessage?.(`DIAG-WS ${s}`);
-  } catch {
-    /* diagnostics only */
-  }
-};
-(globalThis as { __wsdiag?: (s: string) => void }).__wsdiag = __diag;
-__diag('entry-start');
-// TEMP-DIAG (revert): BroadcastChannel breadcrumbs — observable from the page
-// (self.postMessage from a SharedWorker is not reliably visible to clients).
-const __bc: { postMessage: (s: string) => void } | null = (() => {
-  try {
-    const BC = (globalThis as unknown as { BroadcastChannel?: new (n: string) => { postMessage: (s: string) => void; onmessage: ((ev: { data: unknown }) => void) | null } }).BroadcastChannel;
-    if (BC === undefined) return null;
-    const c = new BC('sovd-wire');
-    c.onmessage = (ev) => {
-      if (ev.data === 'ping') c.postMessage('ms-alive');
-    };
-    return c;
-  } catch {
-    return null;
-  }
-})();
-const __bclog = (s: string): void => {
-  try {
-    __bc?.postMessage(s);
-  } catch {
-    /* diagnostics only */
-  }
-};
-__bclog('ms-entry');
-self.addEventListener('error', (e: ErrorEvent) => __diag('worker-error: ' + (e.message || 'unknown')));
-self.addEventListener('unhandledrejection', (e: PromiseRejectionEvent) =>
-  __diag('unhandled-rejection: ' + String((e.reason as { stack?: string })?.stack ?? e.reason).slice(0, 300)),
-);
 
 /**
  * Sync target selection: set `globalThis.SYNC_URL` (e.g. an inline script in
@@ -68,17 +37,13 @@ const node = new StateNode({
   storage: idbStorage(),
   adapter,
 });
-__diag('node-created');
-__bclog('ms-node-created');
 
-void node.boot(async () =>
-  WasmCore.fromFetch(new URL('../core.wasm', import.meta.url).href),
-).then(
-  () => __diag('boot-done'),
-  (e: unknown) => __diag('boot-failed: ' + String((e as { stack?: string })?.stack ?? e).slice(0, 300)),
-);
-__diag('boot-armed');
-__bclog('ms-boot-armed');
+void node
+  .boot(async () => WasmCore.fromFetch(new URL('../core.wasm', import.meta.url).href))
+  .catch(() => {
+    /* boot failed: clients never handshake → the main thread's watchdog
+       (reconnect → dedicated fallback → DEGRADE) carries the UX. */
+  });
 
 const scope = self as unknown as {
   onconnect?: ((ev: MessageEvent) => void) | null;
@@ -88,69 +53,11 @@ const scope = self as unknown as {
 
 if ('onconnect' in scope) {
   scope.onconnect = (ev: MessageEvent) => {
-    __bclog('ms-onconnect-fired'); // TEMP-DIAG (revert)
-    __diag(`onconnect-fired ports=${(ev.ports as unknown[]).length}`);
     const port = (ev.ports as MessagePort[])[0];
     if (port !== undefined) {
-      const wire: WirePort = {
-        postMessage: (msg: unknown, transfer?: Transferable[]) => {
-          __diag('worker-send');
-          try {
-            port.postMessage('CRUMB worker-send'); // TEMP-DIAG: port-channel breadcrumb
-          } catch {
-            /* crumb only */
-          }
-          if (transfer !== undefined) port.postMessage(msg, transfer);
-          else port.postMessage(msg);
-        },
-        addEventListener: (type: 'message', h: (mev: MessageEvent) => void) => {
-          port.addEventListener(type, (mev) => {
-            // TEMP-DIAG: port-channel breadcrumbs (locates the silent drop)
-            try {
-              const d = mev.data as { bin?: unknown } | ArrayBuffer | Uint8Array | null;
-              let shape: string;
-              if (d instanceof ArrayBuffer || (d !== null && typeof d === 'object' && Object.prototype.toString.call(d) === '[object ArrayBuffer]')) {
-                shape = 'AB';
-              } else if (typeof d === 'object' && d !== null && 'bin' in d) {
-                const b = (d as { bin: unknown }).bin;
-                shape =
-                  'obj keys=[' + Object.keys(d).join(',') + '] binCtor=' +
-                  (b !== null && typeof b === 'object' && (b as { constructor?: { name?: string } }).constructor ? (b as { constructor: { name?: string } }).constructor.name : String(typeof b)) +
-                  ' binIsAB_local=' + (b instanceof ArrayBuffer) +
-                  ' binTag=' + (b !== null && typeof b === 'object' ? Object.prototype.toString.call(b) : 'n/a');
-              } else {
-                shape = String(typeof d);
-              }
-              port.postMessage('CRUMB msg-received shape=' + shape);
-            } catch {
-              /* crumb only */
-            }
-            try {
-              h(mev);
-            } catch (e) {
-              try {
-                port.postMessage('CRUMB handler-threw: ' + String((e as { message?: string }).message ?? e).slice(0, 200));
-              } catch {
-                /* crumb only */
-              }
-            }
-          });
-        },
-        start: () => {
-          try {
-            port.postMessage('CRUMB start-called'); // TEMP-DIAG: port-channel breadcrumb
-          } catch {
-            /* crumb only */
-          }
-          port.start();
-        },
-      };
-      node.attachPort(wire);
-      __diag('port-attached');
+      node.attachPort(port as unknown as WirePort);
     }
   };
-  __diag('onconnect-armed');
-  __bclog('ms-module-complete'); // TEMP-DIAG (revert)
 } else {
   node.attachPort({
     postMessage: (msg, transfer) => scope.postMessage(msg, transfer),

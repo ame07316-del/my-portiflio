@@ -13,7 +13,7 @@
  * @complexity boot: O(1) + worker fetch; HUD loop: O(1) per frame.
  */
 
-import { spawnStateWorker, type WirePort } from './client/spawn-worker.js';
+import { spawnStateWorker } from './client/spawn-worker.js';
 import { connectStore } from './client/store.js';
 import { createAppMachine } from './core/fsm.js';
 import { SpscRing } from './core/ring.js';
@@ -35,15 +35,11 @@ async function main(): Promise<void> {
   const store = connectStore(port, {
     events: {
       onReady: () => {
-        console.log('[sovd] boot onReady → LOADED'); // TEMP-DIAG (revert)
         if (machine.canSend('LOADED')) machine.send('LOADED');
         // Ring handoff runs only AFTER the handshake: the worker must be
         // script-ready for the disposable connection's onconnect to fire.
         if (ring !== null) {
-          void handoffRing(ring.buffer).then((ok) => {
-            console.log(`[sovd] boot handoffRing ok=${ok}`); // TEMP-DIAG (revert)
-            store.setSandboxCapable(ok);
-          });
+          void handoffRing(ring.buffer).then((ok) => store.setSandboxCapable(ok));
         }
       },
       onError: (m) => {
@@ -65,21 +61,12 @@ async function main(): Promise<void> {
       return;
     }
     attempts += 1;
-    let next: WirePort | null = null;
-    let kind = 'shared';
     if (attempts >= 4) {
       clearInterval(watch);
-      console.log('[sovd] boot reconnect giving up → DEGRADE'); // TEMP-DIAG (revert)
       if (machine.canSend('DEGRADE')) machine.send('DEGRADE');
       return;
     }
-    if (attempts >= 3) {
-      kind = 'dedicated';
-      next = dedicatedPort();
-    } else {
-      next = connectAgain();
-    }
-    console.log(`[sovd] boot reconnect attempt=${attempts} kind=${kind} port=${next !== null}`); // TEMP-DIAG (revert)
+    const next = attempts >= 3 ? dedicatedPort() : connectAgain();
     if (next !== null) store.reconnect(next);
   }, 1500);
 

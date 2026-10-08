@@ -14,9 +14,10 @@
  * construction below routes through those hooks first.
  *
  * Port discipline: the state port only ever carries plain (transferred
- * ArrayBuffer) frames. SAB handoff (telemetry ring) happens over a separate
- * disposable connection (`handoffRing`), which doubles as the
- * realm-capability probe; call it AFTER the handshake.
+ * ArrayBuffer) frames. The telemetry-ring SAB rides a separate disposable
+ * connection (`handoffRing`) that doubles as the realm-capability probe
+ * (ack ⇒ bench armed; timeout ⇒ bench disabled); call it AFTER the
+ * handshake, when the worker is guaranteed script-ready.
  *
  * @complexity O(1); worker script fetch handled by the platform.
  */
