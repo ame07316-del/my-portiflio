@@ -1,6 +1,6 @@
-// TEMPORARY diagnostic — removed once E2E is green. v10: probe the APP's
-// real 'sovereign-state' SharedWorker instance: plain Hello vs SAB-envelope
-// Hello. Confirms whether SAB-carrying frames are dropped on receipt.
+// TEMPORARY diagnostic — removed once E2E is green. v11: confirm the app
+// reaches ready on the plain-Hello handshake, plus a port-poison check
+// (SAB frame then plain frame on the SAME port).
 import { writeFileSync } from 'node:fs';
 import { test } from '@playwright/test';
 
@@ -13,53 +13,46 @@ test('diag: boot forensics', async ({ page }) => {
   page.on('response', (r) => { if (r.status() >= 400) push(`[http ${r.status()}] ${r.url()}`); });
 
   await page.goto('/index.html');
-  await page.waitForTimeout(3500); // let the app's worker boot (incl. 1s hello retry)
+  const timeline: Array<[number, string]> = [];
+  let last = 0;
+  for (const ms of [800, 1800, 3000, 4500]) {
+    await page.waitForTimeout(ms - last);
+    last = ms;
+    timeline.push([ms, (await page.evaluate(() => document.querySelector('[data-status-pill]')?.textContent ?? 'n/a'))]);
+  }
 
   const info: Record<string, unknown> = {};
-  info.pill = await page.evaluate(() => document.querySelector('[data-status-pill]')?.textContent ?? 'n/a');
+  info.pillTimeline = JSON.stringify(timeline);
 
-  // --- probe the app's real worker (same URL + name 'sovereign-state') ---
-  info.appWorker = await page.evaluate(async () => {
-    const mkHello = (proto: unknown) => {
-      const p = proto as {
-        BinWriter: new (n: number) => { u32(n: number): unknown; finish(): Uint8Array };
-        beginFrame(w: unknown, tag: number, seq: number): { u32(n: number): unknown };
-        Tag: { Hello: number };
-      };
-      const w = new p.BinWriter(16);
-      p.beginFrame(w, p.Tag.Hello, 1).u32(0);
+  // poison check on a fresh port: SAB frame first, then plain on same port
+  info.poisonCheck = await page.evaluate(async () => {
+    const proto = (await import(new URL('./dist/core/protocol.js', location.href).href)) as unknown as {
+      BinWriter: new (n: number) => { u32(n: number): unknown; u8(n: number): unknown; finish(): Uint8Array };
+      beginFrame(w: unknown, tag: number, seq: number): { u32(n: number): unknown; u8(n: number): unknown };
+      Tag: { Hello: number };
+    };
+    const mkHello = (): Uint8Array => {
+      const w = new proto.BinWriter(16);
+      proto.beginFrame(w, proto.Tag.Hello, 1).u32(0);
       return w.finish();
     };
-    const proto = (await import(new URL('./dist/core/protocol.js', location.href).href)) as unknown;
-
-    // conn A: plain Hello (transferred, no SAB)
-    let replyA = 'none';
-    const swA = new SharedWorker('./dist/worker/state-worker.js', { type: 'module', name: 'sovereign-state' });
-    const pa = swA.port;
-    pa.onmessage = (ev) => { const d = ev.data as { bin?: ArrayBuffer }; if (d && d.bin) replyA = 'reply len=' + d.bin.byteLength; };
-    pa.start();
-    const fa = mkHello(proto);
-    pa.postMessage({ bin: fa.buffer }, [fa.buffer]);
-    await new Promise((r) => setTimeout(r, 2500));
-
-    // conn B: SAB-envelope Hello (ring style, SAB NOT transferred)
-    let replyB = 'none';
-    let portErrB = '';
-    const swB = new SharedWorker('./dist/worker/state-worker.js', { type: 'module', name: 'sovereign-state' });
-    const pb = swB.port;
-    pb.onmessage = (ev) => { const d = ev.data as { bin?: ArrayBuffer }; if (d && d.bin) replyB = 'reply len=' + d.bin.byteLength; };
-    pb.onerror = (e) => { portErrB = 'port-error: ' + String(e); };
-    pb.start();
-    let fb: Uint8Array;
+    const sw = new SharedWorker('./dist/worker/state-worker.js', { type: 'module', name: 'poison-' + Math.random() });
+    const p = sw.port;
+    let reply = 'none';
+    p.onmessage = (ev) => { const d = ev.data as { bin?: ArrayBuffer }; if (d && d.bin) reply = 'reply len=' + d.bin.byteLength; };
+    p.start();
+    const sabFrame = mkHello();
     try {
-      fb = mkHello(proto);
-      pb.postMessage({ bin: fb.buffer, sab: new SharedArrayBuffer(4096) });
+      p.postMessage({ bin: sabFrame.buffer, sab: new SharedArrayBuffer(64) }, [sabFrame.buffer]);
     } catch (e) {
-      replyB = 'send-threw: ' + String(e).slice(0, 160);
+      return JSON.stringify({ sabSend: 'threw: ' + String(e).slice(0, 120) });
     }
-    await new Promise((r) => setTimeout(r, 2500));
-
-    return JSON.stringify({ replyA, replyB, portErrB: portErrB || 'none' });
+    await new Promise((r) => setTimeout(r, 1500));
+    const afterSAB = reply;
+    const plainFrame = mkHello();
+    p.postMessage({ bin: plainFrame.buffer }, [plainFrame.buffer]);
+    await new Promise((r) => setTimeout(r, 1500));
+    return JSON.stringify({ sabSend: 'ok', afterSAB, afterPlain: reply });
   });
 
   const b64 = Buffer.from(JSON.stringify({ info, logs })).toString('base64');

@@ -85,6 +85,11 @@ export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; e
   let seq = 0;
   let opCounter = 0;
   let attached = false;
+  // True once the worker has proven it can materialize SAB frames (the
+  // boot-time handoff probe). In realms where it cannot, SAB-carrying
+  // frames are dropped AND can poison the state port — so bench (the only
+  // remaining SAB sender) stays disabled there.
+  let sandboxCapable = false;
 
   function send(bin: Uint8Array, sab?: SharedArrayBuffer): void {
     if (sab !== undefined) port.postMessage({ bin: bin.buffer, sab });
@@ -187,11 +192,14 @@ export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; e
   });
   port.start?.();
 
-  // Hello — rides the telemetry ring SAB when provided.
+  // Hello — ALWAYS plain (transferred ArrayBuffer, never a SAB). In some
+  // Chromium worker realms a SAB frame is dropped on receipt and poisons
+  // the port, which would strand the whole handshake; the ring is
+  // delivered separately (see spawnStateWorker.handoffRing).
   {
     const w = new BinWriter(16);
     beginFrame(w, Tag.Hello, ++seq).u32(0);
-    send(w.finish(), opts.ring);
+    send(w.finish());
   }
 
   // Handshake resilience: in some Chromium worker realms the SAB envelope
@@ -235,9 +243,13 @@ export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; e
     sendSet: (id, field, v) => dispatch({ kind: 'set', id, field, v, ts: 0, actor: 0 }),
     sendDel: (id) => dispatch({ kind: 'del', id, ts: 0, actor: 0 }),
     sendBenchStart: (sab, n) => {
+      if (!sandboxCapable) return; // realm can't carry SAB frames — never poison the state port
       const w = new BinWriter(16);
       beginFrame(w, Tag.Telemetry, ++seq).u8(0).u32(n);
       send(w.finish(), sab);
+    },
+    setSandboxCapable: (ok: boolean) => {
+      sandboxCapable = ok;
     },
     sendBenchStop: () => {
       const w = new BinWriter(16);

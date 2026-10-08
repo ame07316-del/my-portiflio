@@ -515,6 +515,13 @@ export class StateNode {
           if (cmd === 0) {
             const n = r.u32();
             if (env.sab !== undefined) this.#benchStart(n, env.sab);
+          } else if (cmd === 2) {
+            // Ring handoff: the main thread probes realm capability on a
+            // DISPOSABLE connection (a SAB frame on the state port can
+            // poison it in realms that cannot materialize SharedArrayBuffer).
+            // Ack so the probe knows the SAB crossed intact.
+            if (env.sab !== undefined) this.#ring = SpscRing.over(env.sab);
+            client.send(this.#frameAck(seq, client.id));
           } else {
             this.#benchStop();
           }

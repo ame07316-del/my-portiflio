@@ -29,11 +29,10 @@ async function main(): Promise<void> {
   const sabAvailable = typeof SharedArrayBuffer !== 'undefined';
   const ring = sabAvailable ? SpscRing.withCapacity(1024) : null;
 
-  const { port, shared } = spawnStateWorker();
+  const { port, shared, handoffRing } = spawnStateWorker();
   const shell = mountAppShell(machine, shared);
 
   const store = connectStore(port, {
-    ring: ring?.buffer,
     events: {
       onReady: () => {
         if (machine.canSend('LOADED')) machine.send('LOADED');
@@ -44,6 +43,14 @@ async function main(): Promise<void> {
       },
     },
   });
+
+  // Telemetry ring handoff: best-effort, on a disposable second connection
+  // (never on the state port — SAB frames can poison it in realms that
+  // cannot materialize them). Success also arms the bench (sendBenchStart
+  // is gated on the capability).
+  if (ring !== null) {
+    void handoffRing(ring.buffer).then((ok) => store.setSandboxCapable(ok));
+  }
 
   mountProjects(document.getElementById('projects') as HTMLElement, store);
   mountBench(document.getElementById('bench') as HTMLElement, store, sabAvailable);
