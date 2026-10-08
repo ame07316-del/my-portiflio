@@ -7,10 +7,15 @@
  *
  * Port discipline: the returned STATE port only ever carries plain
  * (transferred-ArrayBuffer) frames. Some Chromium worker realms cannot
- * materialize SharedArrayBuffer frames — they are dropped on receipt and
- * can poison the receiving port — so SAB handoff (telemetry ring) happens
- * over a separate, disposable connection (`handoffRing`), which doubles as
- * the realm-capability probe.
+ * materialize SharedArrayBuffer frames — they are dropped on receipt — so
+ * SAB handoff (telemetry ring) happens over a separate, disposable
+ * connection (`handoffRing`), which doubles as the realm-capability probe.
+ *
+ * Connection resilience: some Chromium builds LOST the `onconnect` event
+ * for a SharedWorker connection established while the module script graph
+ * was still loading (observed in CI). `connectAgain` opens a fresh
+ * connection to the SAME instance; by the time it fires the handler is
+ * armed and the port is attached, so the handshake completes.
  *
  * @complexity O(1); worker script fetch handled by the platform.
  */
@@ -26,12 +31,16 @@ export interface WirePort {
 export interface SpawnResult {
   port: WirePort;
   shared: boolean;
+  /** Open another connection to the SAME shared instance (fresh port). */
+  connectAgain: () => WirePort | null;
   /**
    * Deliver the telemetry ring SAB to the worker on a DISPOSABLE second
    * connection (Telemetry cmd 2). Resolves true iff the worker acked —
    * i.e. the SAB crossed intact and the worker's ring is armed. In realms
    * that cannot carry SAB frames the frame is dropped and this resolves
    * false (telemetry/bench degrade to idle; the state port is untouched).
+   * Call AFTER the handshake: the worker must be script-ready for the
+   * connection's onconnect to fire.
    */
   handoffRing: (sab: SharedArrayBuffer) => Promise<boolean>;
 }
@@ -51,20 +60,23 @@ export function spawnStateWorker(): SpawnResult {
     port = w as unknown as WirePort;
   }
 
+  const openConnection = (): WirePort | null => {
+    if (!shared) return null;
+    try {
+      return (new SharedWorker(url, { type: 'module', name }).port as unknown as WirePort);
+    } catch {
+      return null;
+    }
+  };
+
   return {
     port,
     shared,
+    connectAgain: openConnection,
     handoffRing: (sab: SharedArrayBuffer) => {
-      if (!shared) return Promise.resolve(false);
+      const p = openConnection();
+      if (p === null) return Promise.resolve(false);
       return new Promise<boolean>((resolve) => {
-        let sw2: SharedWorker;
-        try {
-          sw2 = new SharedWorker(url, { type: 'module', name });
-        } catch {
-          resolve(false);
-          return;
-        }
-        const p = sw2.port;
         let settled = false;
         const finish = (ok: boolean): void => {
           if (!settled) {
@@ -73,11 +85,11 @@ export function spawnStateWorker(): SpawnResult {
           }
         };
         const timer = setTimeout(() => finish(false), 2500);
-        p.onmessage = () => {
+        p.addEventListener('message', () => {
           clearTimeout(timer);
           finish(true); // worker processed cmd 2 ⇒ the SAB crossed
-        };
-        p.start();
+        });
+        p.start?.();
         const w = new BinWriter(16);
         beginFrame(w, Tag.Telemetry, 1).u8(2);
         const frame = w.finish();

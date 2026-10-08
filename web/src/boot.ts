@@ -29,7 +29,7 @@ async function main(): Promise<void> {
   const sabAvailable = typeof SharedArrayBuffer !== 'undefined';
   const ring = sabAvailable ? SpscRing.withCapacity(1024) : null;
 
-  const { port, shared, handoffRing } = spawnStateWorker();
+  const { port, shared, handoffRing, connectAgain } = spawnStateWorker();
   const shell = mountAppShell(machine, shared);
 
   const store = connectStore(port, {
@@ -37,6 +37,14 @@ async function main(): Promise<void> {
       onReady: () => {
         console.log('[sovd] boot onReady → LOADED'); // TEMP-DIAG (revert)
         if (machine.canSend('LOADED')) machine.send('LOADED');
+        // Ring handoff runs only AFTER the handshake: the worker must be
+        // script-ready for the disposable connection's onconnect to fire.
+        if (ring !== null) {
+          void handoffRing(ring.buffer).then((ok) => {
+            console.log(`[sovd] boot handoffRing ok=${ok}`); // TEMP-DIAG (revert)
+            store.setSandboxCapable(ok);
+          });
+        }
       },
       onError: (m) => {
         console.error('[sovereign]', m);
@@ -45,16 +53,28 @@ async function main(): Promise<void> {
     },
   });
 
-  // Telemetry ring handoff: best-effort, on a disposable second connection
-  // (never on the state port — SAB frames can poison it in realms that
-  // cannot materialize them). Success also arms the bench (sendBenchStart
-  // is gated on the capability).
-  if (ring !== null) {
-    void handoffRing(ring.buffer).then((ok) => {
-      console.log(`[sovd] boot handoffRing ok=${ok}`); // TEMP-DIAG (revert)
-      store.setSandboxCapable(ok);
-    });
-  }
+  // Connection resilience: some Chromium builds LOST the onconnect of a
+  // SharedWorker connection established while the module script graph was
+  // still loading — the port then never gets attached and the handshake
+  // strands. Re-open a fresh connection to the same instance every 1.5s
+  // until the store is attached (bounded; then the FSM degrades).
+  let attempts = 0;
+  const watch = setInterval(() => {
+    if (store.isAttached()) {
+      clearInterval(watch);
+      return;
+    }
+    attempts += 1;
+    if (attempts >= 5) {
+      clearInterval(watch);
+      console.log('[sovd] boot reconnect giving up → DEGRADE'); // TEMP-DIAG (revert)
+      if (machine.canSend('DEGRADE')) machine.send('DEGRADE');
+      return;
+    }
+    const again = connectAgain();
+    console.log(`[sovd] boot reconnect attempt=${attempts} port=${again !== null}`); // TEMP-DIAG (revert)
+    if (again !== null) store.reconnect(again);
+  }, 1500);
 
   mountProjects(document.getElementById('projects') as HTMLElement, store);
   mountBench(document.getElementById('bench') as HTMLElement, store, sabAvailable);

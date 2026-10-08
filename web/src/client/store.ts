@@ -48,6 +48,9 @@ export interface StoreHandle {
   sendBenchStart(sab: SharedArrayBuffer, n: number): void;
   sendBenchStop(): void;
   setSandboxCapable(ok: boolean): void;
+  /** Re-open the state port (same instance, fresh connection + Hello). */
+  reconnect(nextPort: WirePort): void;
+  isAttached(): boolean;
 }
 
 function cellsToView(fields: Map<string, FieldCell>): RecordView {
@@ -75,7 +78,7 @@ function readRecordsFrame(r: BinReader): {
   return { records, deleted, hash };
 }
 
-export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; events?: StoreEvents } = {}): StoreHandle {
+export function connectStore(initialPort: WirePort, opts: { ring?: SharedArrayBuffer; events?: StoreEvents } = {}): StoreHandle {
   const records = signal<ReadonlyMap<string, RecordView>>(new Map());
   const pending = signal<ReadonlySet<number>>(new Set());
   const rejected = signal<{ opId: number; code: string } | null>(null);
@@ -91,10 +94,14 @@ export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; e
   // frames are dropped AND can poison the state port — so bench (the only
   // remaining SAB sender) stays disabled there.
   let sandboxCapable = false;
+  // The live state port. Reconnectable: some Chromium builds lose the
+  // onconnect of a SharedWorker connection made while the module graph is
+  // still loading; a fresh connection to the same instance completes it.
+  let activePort: WirePort = initialPort;
 
   function send(bin: Uint8Array, sab?: SharedArrayBuffer): void {
-    if (sab !== undefined) port.postMessage({ bin: bin.buffer, sab });
-    else port.postMessage({ bin: bin.buffer }, [bin.buffer]);
+    if (sab !== undefined) activePort.postMessage({ bin: bin.buffer, sab });
+    else activePort.postMessage({ bin: bin.buffer }, [bin.buffer]);
   }
 
   function publish(): void {
@@ -118,7 +125,7 @@ export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; e
     }
   }
 
-  port.addEventListener('message', (ev: MessageEvent) => {
+  const onMsg = (ev: MessageEvent): void => {
     const data = ev.data as { bin?: ArrayBuffer | Uint8Array } | ArrayBuffer | Uint8Array | string;
     // TEMP-DIAG (revert): forward worker CRUMBs + log raw inbound events
     if (typeof data === 'string') {
@@ -203,14 +210,18 @@ export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; e
       default:
         return;
     }
-  });
-  port.start?.();
+  };
+  function bindPort(p: WirePort): void {
+    p.addEventListener('message', onMsg);
+    p.start?.();
+  }
+  bindPort(activePort);
 
   // Hello — ALWAYS plain (transferred ArrayBuffer, never a SAB). In some
   // Chromium worker realms a SAB frame is dropped on receipt and poisons
   // the port, which would strand the whole handshake; the ring is
   // delivered separately (see spawnStateWorker.handoffRing).
-  {
+  function sendHello(): void {
     const w = new BinWriter(16);
     beginFrame(w, Tag.Hello, ++seq).u32(0);
     const helloFrame = w.finish();
@@ -222,6 +233,7 @@ export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; e
       throw e;
     }
   }
+  sendHello();
 
   // Handshake resilience: in some Chromium worker realms the SAB envelope
   // cannot be materialized across the port and the frame is dropped
@@ -275,6 +287,12 @@ export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; e
     setSandboxCapable: (ok: boolean) => {
       sandboxCapable = ok;
     },
+    reconnect: (nextPort: WirePort) => {
+      activePort = nextPort;
+      bindPort(activePort);
+      sendHello();
+    },
+    isAttached: () => attached,
     sendBenchStop: () => {
       const w = new BinWriter(16);
       beginFrame(w, Tag.Telemetry, ++seq).u8(1);
