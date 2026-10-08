@@ -128,6 +128,12 @@ export class StateNode {
   #wasm: WasmCore | null = null;
   #ring: SpscRing | null = null;
   #nextClientId = 1;
+  // Clients that greeted before boot finished: they must receive their
+  // Ack+Snapshot only once the replica is authoritative (seeding happens
+  // during boot and is never broadcast — an early reply would be empty
+  // forever).
+  #booted = false;
+  #pendingHellos: Array<{ client: Client; seq: number }> = [];
   #snapTimer: ReturnType<typeof setTimeout> | null = null;
   #benchTimer: ReturnType<typeof setInterval> | null = null;
   #bench = { n: 0, aOff: 0, bOff: 0, dOff: 0, view: null as Float32Array | null };
@@ -157,6 +163,16 @@ export class StateNode {
     }
 
     if (this.lww.size === 0) this.#seed();
+    // The replica is authoritative now (restore + replay + seed complete).
+    // Release clients that greeted us mid-boot with their full snapshot.
+    // (wasm is cosmetic to state: hashing/bench only — clients need not wait)
+    this.#booted = true;
+    const pending = this.#pendingHellos;
+    this.#pendingHellos = [];
+    for (const { client, seq } of pending) {
+      client.send(this.#frameAck(seq, client.id));
+      client.send(this.#frameRecords(Tag.Snapshot, seq, this.lww.liveIds(), []));
+    }
     if (wasmLoader !== undefined) {
       try {
         this.#wasm = await wasmLoader();
@@ -492,6 +508,10 @@ export class StateNode {
       switch (tag) {
         case Tag.Hello: {
           if (env.sab !== undefined) this.#ring = SpscRing.over(env.sab);
+          if (!this.#booted) {
+            this.#pendingHellos.push({ client, seq });
+            return;
+          }
           client.send(this.#frameAck(seq, client.id));
           client.send(this.#frameRecords(Tag.Snapshot, seq, this.lww.liveIds(), []));
           return;
@@ -502,6 +522,10 @@ export class StateNode {
           return;
         }
         case Tag.Snapshot: {
+          if (!this.#booted) {
+            this.#pendingHellos.push({ client, seq });
+            return;
+          }
           client.send(this.#frameRecords(Tag.Snapshot, seq, this.lww.liveIds(), []));
           return;
         }

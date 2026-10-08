@@ -13,7 +13,7 @@
  * @complexity boot: O(1) + worker fetch; HUD loop: O(1) per frame.
  */
 
-import { spawnStateWorker } from './client/spawn-worker.js';
+import { spawnStateWorker, type WirePort } from './client/spawn-worker.js';
 import { connectStore } from './client/store.js';
 import { createAppMachine } from './core/fsm.js';
 import { SpscRing } from './core/ring.js';
@@ -29,7 +29,7 @@ async function main(): Promise<void> {
   const sabAvailable = typeof SharedArrayBuffer !== 'undefined';
   const ring = sabAvailable ? SpscRing.withCapacity(1024) : null;
 
-  const { port, shared, handoffRing, connectAgain } = spawnStateWorker();
+  const { port, shared, handoffRing, connectAgain, dedicatedPort } = spawnStateWorker();
   const shell = mountAppShell(machine, shared);
 
   const store = connectStore(port, {
@@ -53,11 +53,11 @@ async function main(): Promise<void> {
     },
   });
 
-  // Connection resilience: some Chromium builds LOST the onconnect of a
-  // SharedWorker connection established while the module script graph was
-  // still loading — the port then never gets attached and the handshake
-  // strands. Re-open a fresh connection to the same instance every 1.5s
-  // until the store is attached (bounded; then the FSM degrades).
+  // Connection resilience: if the initial (classic-context) handshake has
+  // not landed, re-open fresh connections until it does:
+  //   1.5s / 3.0s — new SharedWorker connections (same instance),
+  //   4.5s        — dedicated Worker (separate instance, last resort),
+  //   6.0s        — give up → DEGRADE.
   let attempts = 0;
   const watch = setInterval(() => {
     if (store.isAttached()) {
@@ -65,15 +65,22 @@ async function main(): Promise<void> {
       return;
     }
     attempts += 1;
-    if (attempts >= 5) {
+    let next: WirePort | null = null;
+    let kind = 'shared';
+    if (attempts >= 4) {
       clearInterval(watch);
       console.log('[sovd] boot reconnect giving up → DEGRADE'); // TEMP-DIAG (revert)
       if (machine.canSend('DEGRADE')) machine.send('DEGRADE');
       return;
     }
-    const again = connectAgain();
-    console.log(`[sovd] boot reconnect attempt=${attempts} port=${again !== null}`); // TEMP-DIAG (revert)
-    if (again !== null) store.reconnect(again);
+    if (attempts >= 3) {
+      kind = 'dedicated';
+      next = dedicatedPort();
+    } else {
+      next = connectAgain();
+    }
+    console.log(`[sovd] boot reconnect attempt=${attempts} kind=${kind} port=${next !== null}`); // TEMP-DIAG (revert)
+    if (next !== null) store.reconnect(next);
   }, 1500);
 
   mountProjects(document.getElementById('projects') as HTMLElement, store);

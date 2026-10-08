@@ -6,6 +6,39 @@
   <title>Sovereign Edge — Portfolio</title>
   <meta name="description" content="Local-first portfolio: state lives in a SharedWorker, heavy compute in WASM, the main thread only paints." />
   <link rel="modulepreload" href="./dist/boot.js" />
+  <script>
+    /* Classic-context launcher for the sovereign state node.
+       Some Chromium builds silently drop SharedWorker/Worker constructions
+       issued from a MODULE-script context in cross-origin-isolated pages
+       (constructor returns; the port never attaches; the script never runs),
+       while the identical construction from a classic-script context works.
+       This inline (classic) script therefore owns all worker construction;
+       the module code picks the port up from window.__sovereign. */
+    (function () {
+      var URL_ = './dist/worker/state-worker.js';
+      var NAME = 'sovereign-state';
+      function spawn() {
+        try {
+          return { port: new SharedWorker(URL_, { type: 'module', name: NAME }).port, shared: true };
+        } catch (e) {
+          try {
+            return { port: new Worker(URL_, { type: 'module' }), shared: false };
+          } catch (e2) {
+            return null;
+          }
+        }
+      }
+      window.__sovereignSpawn = spawn;
+      window.__sovereignDedicated = function () {
+        try {
+          return new Worker(URL_, { type: 'module' });
+        } catch (e) {
+          return null;
+        }
+      };
+      window.__sovereign = spawn();
+    })();
+  </script>
   <style>
     /* ---- critical CSS: every box below has a FIXED reserved geometry so
        hydration can never shift layout (CLS = 0 by construction). ---- */
