@@ -69,7 +69,7 @@ jobs:
           set +e
           npx playwright test 2>&1 | tee /tmp/e.log | tail -c 3000
           RC=${PIPESTATUS[0]}
-          D=$(grep -o 'DIAG-B64 [A-Za-z0-9+/=]*' /tmp/e2e-forensics.txt /tmp/e.log 2>/dev/null | head -1 | cut -c10- | head -c 3900)
+          D=$( { grep -h -o 'DIAG-B64 [A-Za-z0-9+/=]*' /tmp/e2e-forensics.txt /tmp/e.log 2>/dev/null || true; } | head -1 | sed 's/^DIAG-B64 //' | head -c 3900)
           echo "::notice title=DIAG-E2E-rc=$RC-forensics::${D}"
           echo "::notice title=DIAG-E2E-rc=$RC-tail::$(tail -c 2800 /tmp/e.log | base64 -w0)"
           exit $RC

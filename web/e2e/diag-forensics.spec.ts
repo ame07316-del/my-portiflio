@@ -75,6 +75,56 @@ test('diag: boot forensics', async ({ page }) => {
     } catch (e) { return 'ctor-threw: ' + String(e); }
   });
 
+  // --- probe 4: MINIMAL module SharedWorker (onconnect at top of module) ---
+  info.minimalModuleSw = await page.evaluate(async () => {
+    const code = 'self.onconnect = (ev) => { const p = ev.ports[0]; p.onmessage = (e) => p.postMessage("pong"); };\n';
+    const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+    const sw = new SharedWorker(url, { type: 'module', name: 'minmod-' + Date.now() });
+    const port = sw.port;
+    return await new Promise<string>((resolve) => {
+      const t = setTimeout(() => resolve('timeout-no-reply-in-5s'), 5000);
+      sw.onerror = (e) => { clearTimeout(t); resolve('sw-error: ' + (e.message || 'err')); };
+      port.onmessage = (ev) => { clearTimeout(t); resolve('reply: ' + JSON.stringify(ev.data)); };
+      port.start();
+      port.postMessage({});
+    });
+  });
+
+  // --- probe 5: OUR script — conn#1 (immediate), then conn#2 (reconnect, same name) ---
+  info.ourSwReconnect = await page.evaluate(async () => {
+    const name = 'recon-' + Date.now();
+    const protoUrl = new URL('./dist/core/protocol.js', location.href).href;
+    const proto = (await import(protoUrl)) as unknown as {
+      BinWriter: new (n: number) => { u32(n: number): unknown; finish(): Uint8Array };
+      beginFrame(w: unknown, tag: number, seq: number): { u32(n: number): unknown };
+      Tag: { Hello: number };
+    };
+    const mkHello = (): ArrayBuffer => {
+      const w = new proto.BinWriter(16);
+      proto.beginFrame(w, proto.Tag.Hello, 1).u32(0);
+      const frame = w.finish();
+      return frame.buffer as ArrayBuffer;
+    };
+    const probeConn = (sw: SharedWorker, helloBuf: ArrayBuffer, ms: number): Promise<string> =>
+      new Promise((resolve) => {
+        let done = false;
+        const fin = (s: string) => { if (!done) { done = true; clearTimeout(t); resolve(s); } };
+        const t = setTimeout(() => fin('timeout-' + ms + 'ms'), ms);
+        sw.onerror = (e) => fin('sw-error: ' + (e.message || 'err'));
+        sw.port.onmessage = (ev) => {
+          const d = ev.data as { bin?: ArrayBuffer };
+          fin('reply len=' + (d?.bin ? d.bin.byteLength : 'n/a'));
+        };
+        sw.port.start();
+        sw.port.postMessage({ bin: helloBuf }, [helloBuf]);
+      });
+    const sw1 = new SharedWorker('./dist/worker/state-worker.js', { type: 'module', name });
+    const conn1 = await probeConn(sw1, mkHello(), 3000);
+    const sw2 = new SharedWorker('./dist/worker/state-worker.js', { type: 'module', name });
+    const conn2 = await probeConn(sw2, mkHello(), 3000);
+    return JSON.stringify({ conn1, conn2 });
+  });
+
   // --- probe 3: import the worker module graph at PAGE level (browser env) ---
   info.pageLevelImport = await page.evaluate(async () => {
     const url = new URL('./dist/worker/state-worker.js', location.href).href;
