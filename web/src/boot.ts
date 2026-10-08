@@ -29,14 +29,18 @@ async function main(): Promise<void> {
   const sabAvailable = typeof SharedArrayBuffer !== 'undefined';
   const ring = sabAvailable ? SpscRing.withCapacity(1024) : null;
 
-  const { port, shared } = spawnStateWorker();
+  const { port, shared, handoffRing, connectAgain, dedicatedPort } = spawnStateWorker();
   const shell = mountAppShell(machine, shared);
 
   const store = connectStore(port, {
-    ring: ring?.buffer,
     events: {
       onReady: () => {
         if (machine.canSend('LOADED')) machine.send('LOADED');
+        // Ring handoff runs only AFTER the handshake: the worker must be
+        // script-ready for the disposable connection's onconnect to fire.
+        if (ring !== null) {
+          void handoffRing(ring.buffer).then((ok) => store.setSandboxCapable(ok));
+        }
       },
       onError: (m) => {
         console.error('[sovereign]', m);
@@ -44,6 +48,27 @@ async function main(): Promise<void> {
       },
     },
   });
+
+  // Connection resilience: if the initial (classic-context) handshake has
+  // not landed, re-open fresh connections until it does:
+  //   1.5s / 3.0s — new SharedWorker connections (same instance),
+  //   4.5s        — dedicated Worker (separate instance, last resort),
+  //   6.0s        — give up → DEGRADE.
+  let attempts = 0;
+  const watch = setInterval(() => {
+    if (store.isAttached()) {
+      clearInterval(watch);
+      return;
+    }
+    attempts += 1;
+    if (attempts >= 4) {
+      clearInterval(watch);
+      if (machine.canSend('DEGRADE')) machine.send('DEGRADE');
+      return;
+    }
+    const next = attempts >= 3 ? dedicatedPort() : connectAgain();
+    if (next !== null) store.reconnect(next);
+  }, 1500);
 
   mountProjects(document.getElementById('projects') as HTMLElement, store);
   mountBench(document.getElementById('bench') as HTMLElement, store, sabAvailable);

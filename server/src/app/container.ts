@@ -5,28 +5,42 @@
  * Everything is constructor-injected, immutable after wiring, and disposed
  * in reverse order on shutdown — no service locator, no globals, no magic.
  *
+ * Phase 7: the zero-trust door (AuthService + HttpGuard), the realtime
+ * broadcast hub (SSE), and the store selector — real PostgreSQL via
+ * PG_URL, embedded PGlite otherwise. Same one-connection-string swap.
+ *
  * @complexity wiring: O(components); startup dominated by DB bootstrap.
  */
 import { PgliteStore } from '../adapters/pglite-store.js';
+import { PgStore } from '../adapters/pg-store.js';
 import { LruReadStore } from '../adapters/lru-read-store.js';
 import { executeTransfer, validateTransferInput } from '../domain/ledger.js';
 import { OutboxRelay } from '../domain/outbox-relay.js';
 import { EventLoopLagProbe, collectHealth, type ComponentProbe, type HealthReport } from '../obs/health.js';
+import { RealtimeHub } from '../obs/realtime.js';
 import { Tracer } from '../obs/tracer.js';
 import type { LedgerStore, TransferInput, TransferResult } from '../ports/store.js';
 import { EnvelopeCipher, type Envelope } from '../security/envelope.js';
+import { AuthService, type AuthSubject } from '../security/auth.js';
+import { HttpGuard } from '../security/http-guard.js';
 import { IdempotencyKeyer } from '../security/idempotency.js';
 import { PORTFOLIO_POLICIES, evaluate, type AbacRequest } from '../security/abac.js';
 import { SessionRegistry } from '../security/sessions.js';
 import { UdpGateway, type IngestedDatagram } from '../transport/udp-gateway.js';
 import { WorkerPool } from '../transport/worker-pool.js';
 
+/** Default tenant for the portfolio site (bilingual content, Phase 7). */
+export const PORTFOLIO_TENANT = 'portfolio';
+export type { AuthSubject };
+
 export interface SystemConfig {
   readonly udpPort: number;
   readonly host: string;
   readonly masterSecret: string; // >= 32 chars
   readonly idempotencySecret: string; // >= 32 chars
+  readonly adminSecret: string; // >= 32 chars (Phase 7: mandatory admin auth)
   readonly dbDir?: string; // ':memory:' default
+  readonly pgUrl?: string; // Phase 7: real PostgreSQL (PG_URL) — set to swap adapters
   readonly sampleRate?: number; // tracing fraction
   readonly poolSize?: number;
 }
@@ -42,6 +56,9 @@ export interface SovereignSystem {
   readonly lag: EventLoopLagProbe;
   readonly pool: WorkerPool;
   readonly gateway: UdpGateway;
+  readonly auth: AuthService;
+  readonly guard: HttpGuard;
+  readonly hub: RealtimeHub;
   /** Single authorized-entry point — ABAC + validation + OCC in one path. */
   transfer(input: TransferInput, subject: AbacRequest['subject']): Promise<TransferResult>;
   seal(data: string, aad?: string): Envelope;
@@ -52,9 +69,15 @@ export interface SovereignSystem {
 }
 
 export async function createSystem(cfg: SystemConfig): Promise<SovereignSystem> {
-  // ---- adapters (the outer ring) ----
-  const store: LedgerStore = new PgliteStore(cfg.dbDir ?? ':memory:');
+  // ---- store selector (Phase 7): real PostgreSQL when PG_URL is set ----
+  const pg = cfg.pgUrl !== undefined && cfg.pgUrl.length > 0 ? new PgStore(cfg.pgUrl) : null;
+  const store: LedgerStore = pg ?? new PgliteStore(cfg.dbDir ?? ':memory:');
   await store.init();
+
+  // ---- the zero-trust door (Phase 7): mandatory auth + per-IP admission + realtime ----
+  const auth = new AuthService({ adminSecret: cfg.adminSecret });
+  const guard = new HttpGuard();
+  const hub = new RealtimeHub();
 
   const readCache = new LruReadStore<number>(
     1024,
@@ -80,6 +103,12 @@ export async function createSystem(cfg: SystemConfig): Promise<SovereignSystem> 
     new URL('../transport/pool-worker.js', import.meta.url),
     64,
   );
+
+  // ---- outbox → realtime broadcast (+ cross-replica NOTIFY on real PG) ----
+  relay.subscribe((row) => {
+    hub.publish('*', row.topic, JSON.parse(row.payload));
+    if (pg !== null) void pg.notify('sovereign_events', { topic: row.topic, payload: row.payload });
+  });
 
   // ---- the single write path: ABAC → validate → OCC ----
   async function transfer(
@@ -166,6 +195,8 @@ export async function createSystem(cfg: SystemConfig): Promise<SovereignSystem> 
       ok: true,
     }),
     () => ({ name: 'ledger_store', ok: true }),
+    () => ({ name: 'realtime_hub', depth: hub.subscribers, dropped: hub.shedSlow, ok: true }),
+    () => ({ name: 'auth', depth: auth.activeSessions, dropped: guard.deniedLogin, ok: true }),
   ];
 
   const system: SovereignSystem = {
@@ -179,6 +210,9 @@ export async function createSystem(cfg: SystemConfig): Promise<SovereignSystem> 
     lag,
     pool,
     gateway,
+    auth,
+    guard,
+    hub,
     transfer,
     seal: (data, aad) => cipher.encrypt(Buffer.from(data, 'utf8'), aad === undefined ? undefined : Buffer.from(aad, 'utf8')),
     open: (env, aad) =>
@@ -187,6 +221,14 @@ export async function createSystem(cfg: SystemConfig): Promise<SovereignSystem> 
     start: async () => {
       lag.start();
       await gateway.start();
+      if (pg !== null) {
+        await pg.listen('sovereign_events', (payload) => {
+          try {
+            const n = JSON.parse(payload);
+            hub.publish('*', `${n.topic}.replica`, JSON.parse(n.payload));
+          } catch {}
+        });
+      }
     },
     stop: async () => {
       lag.stop();

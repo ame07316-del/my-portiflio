@@ -70,10 +70,18 @@ CREATE TABLE IF NOT EXISTS event_log (
   recorded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (stream, seq)
 );
+CREATE TABLE IF NOT EXISTS crdt_ops (
+  id BIGSERIAL PRIMARY KEY,
+  tenant TEXT NOT NULL DEFAULT current_setting('app.tenant', true),
+  op TEXT NOT NULL,
+  received_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 ALTER TABLE accounts  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE accounts  FORCE ROW LEVEL SECURITY;
 ALTER TABLE transfers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transfers FORCE ROW LEVEL SECURITY;
+ALTER TABLE crdt_ops  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE crdt_ops  FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tenant_accounts ON accounts;
 CREATE POLICY tenant_accounts ON accounts
   USING (tenant = current_setting('app.tenant', true))
@@ -82,12 +90,10 @@ DROP POLICY IF EXISTS tenant_transfers ON transfers;
 CREATE POLICY tenant_transfers ON transfers
   USING (tenant = current_setting('app.tenant', true))
   WITH CHECK (tenant = current_setting('app.tenant', true));
-CREATE TABLE IF NOT EXISTS crdt_ops (
-  id          BIGSERIAL PRIMARY KEY,
-  tenant      TEXT NOT NULL DEFAULT current_setting('app.tenant', true),
-  op          TEXT NOT NULL,
-  received_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+DROP POLICY IF EXISTS tenant_crdt_ops ON crdt_ops;
+CREATE POLICY tenant_crdt_ops ON crdt_ops
+  USING (tenant = current_setting('app.tenant', true))
+  WITH CHECK (tenant = current_setting('app.tenant', true));
 -- Business transactions run under an UNPRIVILEGED role: superusers bypass
 -- RLS by definition, so the API path must not be superuser-owned.
 DO $$ BEGIN
@@ -315,6 +321,19 @@ export class PgliteStore implements LedgerStore {
         JSON.stringify({ opId: id, tenant }),
       ]);
       return id;
+    });
+  }
+
+  async opsSince(tenant: string, afterId: number, limit: number): Promise<Array<{ id: number; op: string }>> {
+    return this.#db.transaction(async (tx) => {
+      const t = tx as Tx;
+      await t.query(`SELECT set_config('role', 'sovereign_app', true)`);
+      await t.query(`SELECT set_config('app.tenant', $1, true)`, [tenant]);
+      const res = await t.query<{ id: bigint | string; op: string }>(
+        `SELECT id, op FROM crdt_ops WHERE id > $1 ORDER BY id LIMIT $2`,
+        [afterId, limit],
+      );
+      return res.rows.map((r) => ({ id: Number(r.id), op: r.op }));
     });
   }
 

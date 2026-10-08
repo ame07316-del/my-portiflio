@@ -1,10 +1,18 @@
 /**
  * worker/state-worker.ts — thin browser shell around the StateNode engine.
  *
- * Runs as a SharedWorker (one sovereign replica shared by all tabs) with a
- * dedicated-Worker fallback. All logic lives in state-node.ts, which is
- * unit/integration-tested in plain Node — this file only wires platform
- * globals (ports, IndexedDB storage, wasm fetch) to the engine.
+ * Runs as a SharedWorker (one sovereign replica shared by all tabs of the
+ * origin — the browser's answer to a local replication server). Falls back
+ * to a dedicated module Worker where SharedWorker is unavailable.
+ *
+ * All logic lives in state-node.ts, which is unit/integration-tested in
+ * plain Node — this file only wires platform globals (ports, IndexedDB
+ * storage, wasm fetch) to the engine.
+ *
+ * Note: worker CONSTRUCTION (new SharedWorker/Worker) is owned by the
+ * classic inline launcher in index.html — some Chromium builds silently
+ * drop worker constructions issued from a module-script context in
+ * cross-origin-isolated pages.
  *
  * @complexity O(1) wiring; boot cost is in StateNode.boot (see there).
  */
@@ -30,9 +38,12 @@ const node = new StateNode({
   adapter,
 });
 
-void node.boot(async () =>
-  WasmCore.fromFetch(new URL('../core.wasm', import.meta.url).href),
-);
+void node
+  .boot(async () => WasmCore.fromFetch(new URL('../core.wasm', import.meta.url).href))
+  .catch(() => {
+    /* boot failed: clients never handshake → the main thread's watchdog
+       (reconnect → dedicated fallback → DEGRADE) carries the UX. */
+  });
 
 const scope = self as unknown as {
   onconnect?: ((ev: MessageEvent) => void) | null;
@@ -43,7 +54,9 @@ const scope = self as unknown as {
 if ('onconnect' in scope) {
   scope.onconnect = (ev: MessageEvent) => {
     const port = (ev.ports as MessagePort[])[0];
-    if (port !== undefined) node.attachPort(port as unknown as WirePort);
+    if (port !== undefined) {
+      node.attachPort(port as unknown as WirePort);
+    }
   };
 } else {
   node.attachPort({

@@ -47,6 +47,10 @@ export interface StoreHandle {
   sendDel(id: string): number;
   sendBenchStart(sab: SharedArrayBuffer, n: number): void;
   sendBenchStop(): void;
+  setSandboxCapable(ok: boolean): void;
+  /** Re-open the state port (same instance, fresh connection + Hello). */
+  reconnect(nextPort: WirePort): void;
+  isAttached(): boolean;
 }
 
 function cellsToView(fields: Map<string, FieldCell>): RecordView {
@@ -74,7 +78,7 @@ function readRecordsFrame(r: BinReader): {
   return { records, deleted, hash };
 }
 
-export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; events?: StoreEvents } = {}): StoreHandle {
+export function connectStore(initialPort: WirePort, opts: { ring?: SharedArrayBuffer; events?: StoreEvents } = {}): StoreHandle {
   const records = signal<ReadonlyMap<string, RecordView>>(new Map());
   const pending = signal<ReadonlySet<number>>(new Set());
   const rejected = signal<{ opId: number; code: string } | null>(null);
@@ -85,10 +89,19 @@ export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; e
   let seq = 0;
   let opCounter = 0;
   let attached = false;
+  // True once the worker has proven it can materialize SAB frames (the
+  // post-handshake handoff probe). In realms where the probe fails, bench
+  // (the only SAB sender) stays disabled rather than risking a silently
+  // dropped frame.
+  let sandboxCapable = false;
+  // The live state port. Reconnectable: some Chromium builds lose the
+  // onconnect of a SharedWorker connection made while the module graph is
+  // still loading; a fresh connection to the same instance completes it.
+  let activePort: WirePort = initialPort;
 
   function send(bin: Uint8Array, sab?: SharedArrayBuffer): void {
-    if (sab !== undefined) port.postMessage({ bin: bin.buffer, sab });
-    else port.postMessage({ bin: bin.buffer }, [bin.buffer]);
+    if (sab !== undefined) activePort.postMessage({ bin: bin.buffer, sab });
+    else activePort.postMessage({ bin: bin.buffer }, [bin.buffer]);
   }
 
   function publish(): void {
@@ -111,16 +124,22 @@ export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; e
     }
   }
 
-  port.addEventListener('message', (ev: MessageEvent) => {
+  const onMsg = (ev: MessageEvent): void => {
     const data = ev.data as { bin?: ArrayBuffer | Uint8Array } | ArrayBuffer | Uint8Array;
-    const raw =
-      data instanceof ArrayBuffer
-        ? new Uint8Array(data)
-        : data instanceof Uint8Array
-          ? data
-          : data !== null && typeof data === 'object' && 'bin' in data && data.bin instanceof ArrayBuffer
-            ? new Uint8Array(data.bin)
-            : null;
+    // Realm-agnostic: worker→page buffers cross a structured-clone boundary.
+    const isAB = (x: unknown): x is ArrayBuffer =>
+      x instanceof ArrayBuffer ||
+      (typeof x === 'object' && x !== null && Object.prototype.toString.call(x) === '[object ArrayBuffer]');
+    const isU8 = (x: unknown): x is Uint8Array =>
+      x instanceof Uint8Array ||
+      (typeof x === 'object' && x !== null && Object.prototype.toString.call(x) === '[object Uint8Array]');
+    const raw = isAB(data)
+      ? new Uint8Array(data)
+      : isU8(data)
+        ? data
+        : data !== null && typeof data === 'object' && 'bin' in data && isAB(data.bin)
+          ? new Uint8Array(data.bin)
+          : null;
     if (raw === null) return;
     let r: BinReader;
     let header: { tag: number; seq: number };
@@ -177,15 +196,28 @@ export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; e
       default:
         return;
     }
-  });
-  port.start?.();
+  };
+  function bindPort(p: WirePort): void {
+    p.addEventListener('message', onMsg);
+    p.start?.();
+  }
+  bindPort(activePort);
 
-  // Hello — rides the telemetry ring SAB when provided.
-  {
+  // Hello — plain (transferred ArrayBuffer, never a SAB). Keeping the
+  // handshake dependency-free makes it robust in restricted worker realms;
+  // the telemetry ring SAB is delivered separately after the handshake
+  // (see spawnStateWorker.handoffRing), which also proves SAB capability.
+  function sendHello(): void {
     const w = new BinWriter(16);
     beginFrame(w, Tag.Hello, ++seq).u32(0);
-    send(w.finish(), opts.ring);
+    send(w.finish());
   }
+  sendHello();
+
+  // Handshake resilience lives in boot.ts: if no handshake lands, the
+  // watchdog re-opens fresh connections (SharedWorker → dedicated Worker →
+  // DEGRADE). A plain Hello re-send on the same port is useless when the
+  // port itself is dead, which is the failure mode being recovered from.
 
   function pushPending(opId: number): void {
     batch(() => {
@@ -216,10 +248,20 @@ export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; e
     sendSet: (id, field, v) => dispatch({ kind: 'set', id, field, v, ts: 0, actor: 0 }),
     sendDel: (id) => dispatch({ kind: 'del', id, ts: 0, actor: 0 }),
     sendBenchStart: (sab, n) => {
+      if (!sandboxCapable) return; // realm can't carry SAB frames — never poison the state port
       const w = new BinWriter(16);
       beginFrame(w, Tag.Telemetry, ++seq).u8(0).u32(n);
       send(w.finish(), sab);
     },
+    setSandboxCapable: (ok: boolean) => {
+      sandboxCapable = ok;
+    },
+    reconnect: (nextPort: WirePort) => {
+      activePort = nextPort;
+      bindPort(activePort);
+      sendHello();
+    },
+    isAttached: () => attached,
     sendBenchStop: () => {
       const w = new BinWriter(16);
       beginFrame(w, Tag.Telemetry, ++seq).u8(1);

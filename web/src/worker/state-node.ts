@@ -49,14 +49,39 @@ interface Envelope {
   sab?: SharedArrayBuffer;
 }
 
+/**
+ * Realm-agnostic buffer checks. Envelopes cross structured-clone boundaries
+ * (page ⇄ worker); `instanceof` against realm-foreign typed arrays can fail
+ * on some engines, so we duck-type via @@toStringTag as the fallback.
+ */
+function isAB(x: unknown): x is ArrayBuffer {
+  return (
+    x instanceof ArrayBuffer ||
+    (typeof x === 'object' && x !== null && Object.prototype.toString.call(x) === '[object ArrayBuffer]')
+  );
+}
+function isU8(x: unknown): x is Uint8Array {
+  return (
+    x instanceof Uint8Array ||
+    (typeof x === 'object' && x !== null && Object.prototype.toString.call(x) === '[object Uint8Array]')
+  );
+}
+// NOTE: never reference the `SharedArrayBuffer` identifier here — in some
+// Chromium worker realms the global binding is absent even when
+// crossOriginIsolated SAB objects cross the port (a ReferenceError would
+// kill every message handler). Tag-only duck typing is realm-proof.
+function isSAB(x: unknown): x is SharedArrayBuffer {
+  return typeof x === 'object' && x !== null && Object.prototype.toString.call(x) === '[object SharedArrayBuffer]';
+}
+
 function toEnvelope(data: unknown): Envelope | null {
-  if (data instanceof ArrayBuffer) return { bin: new Uint8Array(data) };
-  if (data instanceof Uint8Array) return { bin: data };
+  if (isAB(data)) return { bin: new Uint8Array(data) };
+  if (isU8(data)) return { bin: data };
   if (typeof data === 'object' && data !== null && 'bin' in data) {
     const d = data as { bin: unknown; sab?: unknown };
-    const bin = d.bin instanceof ArrayBuffer ? new Uint8Array(d.bin) : d.bin instanceof Uint8Array ? d.bin : null;
+    const bin = isAB(d.bin) ? new Uint8Array(d.bin) : isU8(d.bin) ? d.bin : null;
     if (bin === null) return null;
-    const sab = d.sab instanceof SharedArrayBuffer ? d.sab : undefined;
+    const sab = isSAB(d.sab) ? d.sab : undefined;
     return { bin, sab };
   }
   return null;
@@ -103,6 +128,12 @@ export class StateNode {
   #wasm: WasmCore | null = null;
   #ring: SpscRing | null = null;
   #nextClientId = 1;
+  // Clients that greeted before boot finished: they must receive their
+  // Ack+Snapshot only once the replica is authoritative (seeding happens
+  // during boot and is never broadcast — an early reply would be empty
+  // forever).
+  #booted = false;
+  #pendingHellos: Array<{ client: Client; seq: number }> = [];
   #snapTimer: ReturnType<typeof setTimeout> | null = null;
   #benchTimer: ReturnType<typeof setInterval> | null = null;
   #bench = { n: 0, aOff: 0, bOff: 0, dOff: 0, view: null as Float32Array | null };
@@ -132,6 +163,16 @@ export class StateNode {
     }
 
     if (this.lww.size === 0) this.#seed();
+    // The replica is authoritative now (restore + replay + seed complete).
+    // Release clients that greeted us mid-boot with their full snapshot.
+    // (wasm is cosmetic to state: hashing/bench only — clients need not wait)
+    this.#booted = true;
+    const pending = this.#pendingHellos;
+    this.#pendingHellos = [];
+    for (const { client, seq } of pending) {
+      client.send(this.#frameAck(seq, client.id));
+      client.send(this.#frameRecords(Tag.Snapshot, seq, this.lww.liveIds(), []));
+    }
     if (wasmLoader !== undefined) {
       try {
         this.#wasm = await wasmLoader();
@@ -144,22 +185,22 @@ export class StateNode {
   #seed(): void {
     const samples: Array<Record<string, FieldValue>> = [
       {
-        title: 'Estate Platform — منصة عقارية',
-        summary: 'Real-time listings with map clustering and bilingual search.',
-        status: 'live',
-        sort: 1,
+        title: 'Interactive Restaurant Menu', title_ar: 'منيو مطعم تفاعلي',
+        summary: 'QR-first digital menu with a full admin dashboard: dishes, categories, prices and one-tap availability.',
+        summary_ar: 'منيو رقمي يعمل بالـ QR مع لوحة تحكم كاملة: أصناف وأقسام وأسعار وإتاحة الصنف بضغطة واحدة.',
+        url: 'https://interactive-restaurant-menu-one.vercel.app/', status: 'live', sort: 1,
       },
       {
-        title: 'Performance Dashboard — لوحة أداء',
-        summary: 'Lock-free telemetry ingestion at 120 Hz, rendered off the main thread.',
-        status: 'live',
-        sort: 2,
+        title: 'Gym & Fitness Platform', title_ar: 'منصة جيم ولياقة',
+        summary: 'Conversion-focused gym site: timetable, membership plans and a protected staff dashboard.',
+        summary_ar: 'موقع جيم مصمم للتحويل: جدول الحصص وباقات الاشتراك ولوحة إدارة محمية للفريق.',
+        url: 'https://gym-fitness-liard.vercel.app/', status: 'live', sort: 2,
       },
       {
-        title: 'Offline CRM — نظام عملاء بلا اتصال',
-        summary: 'CRDT-synced records: writes never block, conflicts never lose data.',
-        status: 'draft',
-        sort: 3,
+        title: 'EstateHub Pro', title_ar: 'منصة العقارات',
+        summary: 'Property listing hub with rich search, filtering and detailed pages that scale to thousands of units.',
+        summary_ar: 'منصة عقارات ببحث متقدم وفلاتر وصفحات تفاصيل تستحمل من عشرات لآلاف الوحدات.',
+        url: 'https://estate-hub-pro.vercel.app/', status: 'live', sort: 3,
       },
     ];
     for (const fields of samples) {
@@ -467,6 +508,10 @@ export class StateNode {
       switch (tag) {
         case Tag.Hello: {
           if (env.sab !== undefined) this.#ring = SpscRing.over(env.sab);
+          if (!this.#booted) {
+            this.#pendingHellos.push({ client, seq });
+            return;
+          }
           client.send(this.#frameAck(seq, client.id));
           client.send(this.#frameRecords(Tag.Snapshot, seq, this.lww.liveIds(), []));
           return;
@@ -477,6 +522,10 @@ export class StateNode {
           return;
         }
         case Tag.Snapshot: {
+          if (!this.#booted) {
+            this.#pendingHellos.push({ client, seq });
+            return;
+          }
           client.send(this.#frameRecords(Tag.Snapshot, seq, this.lww.liveIds(), []));
           return;
         }
@@ -490,6 +539,13 @@ export class StateNode {
           if (cmd === 0) {
             const n = r.u32();
             if (env.sab !== undefined) this.#benchStart(n, env.sab);
+          } else if (cmd === 2) {
+            // Ring handoff: the main thread probes realm capability on a
+            // DISPOSABLE connection (a SAB frame on the state port can
+            // poison it in realms that cannot materialize SharedArrayBuffer).
+            // Ack so the probe knows the SAB crossed intact.
+            if (env.sab !== undefined) this.#ring = SpscRing.over(env.sab);
+            client.send(this.#frameAck(seq, client.id));
           } else {
             this.#benchStop();
           }
