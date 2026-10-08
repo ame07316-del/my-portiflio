@@ -66,11 +66,12 @@ function isU8(x: unknown): x is Uint8Array {
     (typeof x === 'object' && x !== null && Object.prototype.toString.call(x) === '[object Uint8Array]')
   );
 }
+// NOTE: never reference the `SharedArrayBuffer` identifier here — in some
+// Chromium worker realms the global binding is absent even when
+// crossOriginIsolated SAB objects cross the port (a ReferenceError would
+// kill every message handler). Tag-only duck typing is realm-proof.
 function isSAB(x: unknown): x is SharedArrayBuffer {
-  return (
-    x instanceof SharedArrayBuffer ||
-    (typeof x === 'object' && x !== null && Object.prototype.toString.call(x) === '[object SharedArrayBuffer]')
-  );
+  return typeof x === 'object' && x !== null && Object.prototype.toString.call(x) === '[object SharedArrayBuffer]';
 }
 
 function toEnvelope(data: unknown): Envelope | null {
