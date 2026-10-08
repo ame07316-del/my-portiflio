@@ -1,6 +1,6 @@
-// TEMPORARY diagnostic — removed once E2E is green. v6: inside-SharedWorker
-// per-module dynamic-import chain (absolute URLs) with real error messages,
-// plus Hello on the original connection and on a fresh reconnect.
+// TEMPORARY diagnostic — removed once E2E is green. v7: verify the
+// self.postMessage→sw.onmessage channel with plain controls (no TLA, TLA only,
+// single dynamic import), then the full chain with per-import timeout races.
 import { writeFileSync } from 'node:fs';
 import { test } from '@playwright/test';
 
@@ -18,23 +18,55 @@ test('diag: boot forensics', async ({ page }) => {
   const info: Record<string, unknown> = {};
   info.pill = await page.evaluate(() => document.querySelector('[data-status-pill]')?.textContent ?? 'n/a');
 
-  // --- control: minimal blob module SharedWorker ---
-  info.minimalModuleSw = await page.evaluate(async () => {
-    const code = 'self.onconnect = (ev) => { const p = ev.ports[0]; p.onmessage = (e) => p.postMessage("pong"); };\n';
-    const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
-    const sw = new SharedWorker(url, { type: 'module', name: 'minmod-' + Date.now() });
-    const port = sw.port;
-    return await new Promise<string>((resolve) => {
-      const t = setTimeout(() => resolve('timeout-no-reply-in-4s'), 4000);
-      sw.onerror = (e) => { clearTimeout(t); resolve('sw-error: ' + (e.message || 'err')); };
-      port.onmessage = (ev) => { clearTimeout(t); resolve('reply: ' + JSON.stringify(ev.data)); };
-      port.start();
-      port.postMessage({});
-    });
-  });
+  // helper: run a blob module SharedWorker, collect sw.onmessage strings for ms
+  info.probeC_plainSelfPost = await page.evaluate(
+    async (code: string, ms: number) => {
+      const msgs: string[] = [];
+      let swError = '';
+      const sw = new SharedWorker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })), { type: 'module', name: 'c-' + Math.random() });
+      sw.onmessage = (ev) => { if (msgs.length < 40 && typeof ev.data === 'string') msgs.push(ev.data.slice(0, 200)); };
+      sw.onerror = (e) => { swError = (e.message || e.type || 'sw-error') + (e.filename ? ' @' + e.filename : ''); };
+      await new Promise((r) => setTimeout(r, ms));
+      return JSON.stringify({ swError: swError || 'none', msgs });
+    },
+    'self.postMessage("self-post-plain");\n',
+    2500,
+  );
 
-  // --- the chain: per-module dynamic import inside a SharedWorker ---
-  info.chain = await page.evaluate(async () => {
+  info.probeD_tlaOnly = await page.evaluate(
+    async (code: string, ms: number) => {
+      const msgs: string[] = [];
+      let swError = '';
+      const sw = new SharedWorker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })), { type: 'module', name: 'd-' + Math.random() });
+      sw.onmessage = (ev) => { if (msgs.length < 40 && typeof ev.data === 'string') msgs.push(ev.data.slice(0, 200)); };
+      sw.onerror = (e) => { swError = (e.message || e.type || 'sw-error') + (e.filename ? ' @' + e.filename : ''); };
+      await new Promise((r) => setTimeout(r, ms));
+      return JSON.stringify({ swError: swError || 'none', msgs });
+    },
+    'await new Promise((r) => setTimeout(r, 50));\nself.postMessage("self-post-tla");\n',
+    2500,
+  );
+
+  const origin = await page.evaluate(() => location.origin);
+  info.probeE_singleImport = await page.evaluate(
+    async (tgt: string) => {
+      const msgs: string[] = [];
+      let swError = '';
+      const code =
+        'const t = ' + JSON.stringify(tgt) + ';\n' +
+        'try { await import(t); self.postMessage("imp-ok"); }\n' +
+        'catch (e) { self.postMessage("imp-fail :: " + String((e && e.message) || e).slice(0, 160)); }\n';
+      const sw = new SharedWorker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })), { type: 'module', name: 'e2-' + Math.random() });
+      sw.onmessage = (ev) => { if (msgs.length < 40 && typeof ev.data === 'string') msgs.push(ev.data.slice(0, 200)); };
+      sw.onerror = (e) => { swError = (e.message || e.type || 'sw-error') + (e.filename ? ' @' + e.filename : ''); };
+      await new Promise((r) => setTimeout(r, 4000));
+      return JSON.stringify({ swError: swError || 'none', msgs });
+    },
+    origin + '/dist/core/bounds.js',
+  );
+
+  // --- full chain with per-import 2.5s timeout races ---
+  info.chainRaced = await page.evaluate(async () => {
     const base = location.origin;
     const targets = [
       '/dist/core/bounds.js',
@@ -51,52 +83,22 @@ test('diag: boot forensics', async ({ page }) => {
     ].map((p) => base + p);
     const code =
       'const targets = ' + JSON.stringify(targets) + ';\n' +
+      'const race = (p) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("import-hung-2500ms")), 2500))]);\n' +
       'for (const t of targets) {\n' +
-      '  try { await import(t); self.postMessage("diag-chain OK " + t.slice(' + base.length + ')); }\n' +
-      '  catch (e) { self.postMessage("diag-chain FAIL " + t.slice(' + base.length + ') + " :: " + String((e && e.message) || e).slice(0, 200)); }\n' +
+      '  try { await race(import(t)); self.postMessage("OK " + t.slice(' + base.length + ')); }\n' +
+      '  catch (e) { self.postMessage("FAIL " + t.slice(' + base.length + ') + " :: " + String((e && e.message) || e).slice(0, 160)); }\n' +
       '}\n' +
-      'self.postMessage("diag-chain done");\n';
-    const blobUrl = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
-    const name = 'chain-' + Date.now();
+      'self.postMessage("done");\n';
     const msgs: string[] = [];
     let swError = '';
-    const sw = new SharedWorker(blobUrl, { type: 'module', name });
-    sw.onmessage = (ev) => { if (msgs.length < 60 && typeof ev.data === 'string') msgs.push(ev.data.slice(0, 220)); };
-    sw.onerror = (e) => { swError = swError + ' | ' + (e.message || e.type || 'sw-error') + (e.filename ? ' @' + e.filename : ''); };
-    const port = sw.port;
-    let reply1 = 'none';
-    port.onmessage = (ev) => { const d = ev.data as { bin?: ArrayBuffer }; if (d && d.bin) reply1 = 'reply len=' + d.bin.byteLength; };
-    const protoUrl = new URL('./dist/core/protocol.js', location.href).href;
-    const proto = (await import(protoUrl)) as unknown as {
-      BinWriter: new (n: number) => { u32(n: number): unknown; finish(): Uint8Array };
-      beginFrame(w: unknown, tag: number, seq: number): { u32(n: number): unknown };
-      Tag: { Hello: number };
-    };
-    const mkHello = (): ArrayBuffer => {
-      const w = new proto.BinWriter(16);
-      proto.beginFrame(w, proto.Tag.Hello, 1).u32(0);
-      return w.finish().buffer as ArrayBuffer;
-    };
-    port.start();
+    const sw = new SharedWorker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })), { type: 'module', name: 'cr-' + Math.random() });
+    sw.onmessage = (ev) => { if (msgs.length < 60 && typeof ev.data === 'string') msgs.push(ev.data.slice(0, 200)); };
+    sw.onerror = (e) => { swError = swError + ' | ' + (e.message || e.type || 'sw-error'); };
     await new Promise<void>((resolve) => {
       const t0 = Date.now();
-      const iv = setInterval(() => { if (msgs.includes('diag-chain done') || Date.now() - t0 > 9000) { clearInterval(iv); resolve(); } }, 100);
+      const iv = setInterval(() => { if (msgs.includes('done') || Date.now() - t0 > 12000) { clearInterval(iv); resolve(); } }, 100);
     });
-    const chainDone = msgs.includes('diag-chain done');
-    // Hello #1: original connection (made at construction, before module ready)
-    const h1 = mkHello();
-    port.postMessage({ bin: h1 }, [h1]);
-    await new Promise((r) => setTimeout(r, 2500));
-    // Hello #2: fresh connection object, same instance (name + blob URL)
-    let reply2 = 'none';
-    const sw2 = new SharedWorker(blobUrl, { type: 'module', name });
-    const port2 = sw2.port;
-    port2.onmessage = (ev) => { const d = ev.data as { bin?: ArrayBuffer }; if (d && d.bin) reply2 = 'reply len=' + d.bin.byteLength; };
-    port2.start();
-    const h2 = mkHello();
-    port2.postMessage({ bin: h2 }, [h2]);
-    await new Promise((r) => setTimeout(r, 2500));
-    return JSON.stringify({ swError: swError || 'none', chainDone, reply1, reply2, msgs });
+    return JSON.stringify({ swError: swError || 'none', done: msgs.includes('done'), msgs });
   });
 
   const b64 = Buffer.from(JSON.stringify({ info, logs })).toString('base64');
