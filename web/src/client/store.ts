@@ -47,6 +47,7 @@ export interface StoreHandle {
   sendDel(id: string): number;
   sendBenchStart(sab: SharedArrayBuffer, n: number): void;
   sendBenchStop(): void;
+  setSandboxCapable(ok: boolean): void;
 }
 
 function cellsToView(fields: Map<string, FieldCell>): RecordView {
