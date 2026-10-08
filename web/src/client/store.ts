@@ -119,7 +119,15 @@ export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; e
   }
 
   port.addEventListener('message', (ev: MessageEvent) => {
-    const data = ev.data as { bin?: ArrayBuffer | Uint8Array } | ArrayBuffer | Uint8Array;
+    const data = ev.data as { bin?: ArrayBuffer | Uint8Array } | ArrayBuffer | Uint8Array | string;
+    // TEMP-DIAG (revert): forward worker CRUMBs + log raw inbound events
+    if (typeof data === 'string') {
+      console.log(`[sovd] main-evt string: ${data.slice(0, 160)}`);
+      return;
+    }
+    console.log(
+      `[sovd] main-evt ${data !== null && typeof data === 'object' && 'bin' in data ? 'obj bin=' + ((data as { bin: unknown }).bin instanceof ArrayBuffer ? (data as { bin: ArrayBuffer }).bin.byteLength : String(typeof (data as { bin: unknown }).bin)) : String(typeof data)}`,
+    );
     // Realm-agnostic: worker→page buffers cross a structured-clone boundary.
     const isAB = (x: unknown): x is ArrayBuffer =>
       x instanceof ArrayBuffer ||
@@ -134,15 +142,20 @@ export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; e
         : data !== null && typeof data === 'object' && 'bin' in data && isAB(data.bin)
           ? new Uint8Array(data.bin)
           : null;
-    if (raw === null) return;
+    if (raw === null) {
+      console.log('[sovd] main-drop: envelope null'); // TEMP-DIAG (revert)
+      return;
+    }
     let r: BinReader;
     let header: { tag: number; seq: number };
     try {
       r = new BinReader(raw);
       header = readHeader(r);
     } catch {
+      console.log('[sovd] main-drop: parse fail len=' + raw.length); // TEMP-DIAG (revert)
       return; // drop malformed frames
     }
+    console.log(`[sovd] main-frame tag=${header.tag} seq=${header.seq}`); // TEMP-DIAG (revert)
     switch (header.tag) {
       case Tag.Ack: {
         const id = r.u32();
@@ -200,7 +213,14 @@ export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; e
   {
     const w = new BinWriter(16);
     beginFrame(w, Tag.Hello, ++seq).u32(0);
-    send(w.finish());
+    const helloFrame = w.finish();
+    console.log(`[sovd] main-sent Hello seq=${seq} len=${helloFrame.length}`); // TEMP-DIAG (revert)
+    try {
+      send(helloFrame);
+    } catch (e) {
+      console.log('[sovd] main-sent Hello THREW: ' + String(e).slice(0, 200)); // TEMP-DIAG (revert)
+      throw e;
+    }
   }
 
   // Handshake resilience: in some Chromium worker realms the SAB envelope
@@ -209,9 +229,12 @@ export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; e
   // the Hello plain (transferred, no SAB) so the UI still reaches ready.
   const helloRetry = setTimeout(() => {
     if (!attached) {
+      console.log('[sovd] main-hello-retry (still not attached at 1s)'); // TEMP-DIAG (revert)
       const w2 = new BinWriter(16);
       beginFrame(w2, Tag.Hello, ++seq).u32(0);
       send(w2.finish());
+    } else {
+      console.log('[sovd] main-hello-retry: already attached, skip'); // TEMP-DIAG (revert)
     }
   }, 1000);
 

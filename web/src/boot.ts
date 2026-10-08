@@ -35,6 +35,7 @@ async function main(): Promise<void> {
   const store = connectStore(port, {
     events: {
       onReady: () => {
+        console.log('[sovd] boot onReady → LOADED'); // TEMP-DIAG (revert)
         if (machine.canSend('LOADED')) machine.send('LOADED');
       },
       onError: (m) => {
@@ -49,7 +50,10 @@ async function main(): Promise<void> {
   // cannot materialize them). Success also arms the bench (sendBenchStart
   // is gated on the capability).
   if (ring !== null) {
-    void handoffRing(ring.buffer).then((ok) => store.setSandboxCapable(ok));
+    void handoffRing(ring.buffer).then((ok) => {
+      console.log(`[sovd] boot handoffRing ok=${ok}`); // TEMP-DIAG (revert)
+      store.setSandboxCapable(ok);
+    });
   }
 
   mountProjects(document.getElementById('projects') as HTMLElement, store);
