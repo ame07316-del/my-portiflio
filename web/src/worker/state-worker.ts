@@ -46,6 +46,7 @@ const node = new StateNode({
   adapter,
 });
 __diag('node-created');
+__bclog('ms-node-created');
 
 void node.boot(async () =>
   WasmCore.fromFetch(new URL('../core.wasm', import.meta.url).href),
@@ -54,6 +55,7 @@ void node.boot(async () =>
   (e: unknown) => __diag('boot-failed: ' + String((e as { stack?: string })?.stack ?? e).slice(0, 300)),
 );
 __diag('boot-armed');
+__bclog('ms-boot-armed');
 
 const scope = self as unknown as {
   onconnect?: ((ev: MessageEvent) => void) | null;
@@ -63,6 +65,7 @@ const scope = self as unknown as {
 
 if ('onconnect' in scope) {
   scope.onconnect = (ev: MessageEvent) => {
+    __bclog('ms-onconnect-fired'); // TEMP-DIAG (revert)
     __diag(`onconnect-fired ports=${(ev.ports as unknown[]).length}`);
     const port = (ev.ports as MessagePort[])[0];
     if (port !== undefined) {
@@ -124,6 +127,7 @@ if ('onconnect' in scope) {
     }
   };
   __diag('onconnect-armed');
+  __bclog('ms-module-complete'); // TEMP-DIAG (revert)
 } else {
   node.attachPort({
     postMessage: (msg, transfer) => scope.postMessage(msg, transfer),
