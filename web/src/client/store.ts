@@ -107,6 +107,7 @@ export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; e
     publish();
     if (tag === Tag.Snapshot && !attached) {
       attached = true;
+      clearTimeout(helloRetry);
       opts.events?.onReady?.(clientId.peek());
     }
   }
@@ -192,6 +193,18 @@ export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; e
     beginFrame(w, Tag.Hello, ++seq).u32(0);
     send(w.finish(), opts.ring);
   }
+
+  // Handshake resilience: in some Chromium worker realms the SAB envelope
+  // cannot be materialized across the port and the frame is dropped
+  // silently. The ring is telemetry-only — if no handshake arrives, retry
+  // the Hello plain (transferred, no SAB) so the UI still reaches ready.
+  const helloRetry = setTimeout(() => {
+    if (!attached) {
+      const w2 = new BinWriter(16);
+      beginFrame(w2, Tag.Hello, ++seq).u32(0);
+      send(w2.finish());
+    }
+  }, 1000);
 
   function pushPending(opId: number): void {
     batch(() => {
