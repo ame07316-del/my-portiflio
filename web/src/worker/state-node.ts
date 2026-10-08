@@ -49,14 +49,38 @@ interface Envelope {
   sab?: SharedArrayBuffer;
 }
 
+/**
+ * Realm-agnostic buffer checks. Envelopes cross structured-clone boundaries
+ * (page ⇄ worker); `instanceof` against realm-foreign typed arrays can fail
+ * on some engines, so we duck-type via @@toStringTag as the fallback.
+ */
+function isAB(x: unknown): x is ArrayBuffer {
+  return (
+    x instanceof ArrayBuffer ||
+    (typeof x === 'object' && x !== null && Object.prototype.toString.call(x) === '[object ArrayBuffer]')
+  );
+}
+function isU8(x: unknown): x is Uint8Array {
+  return (
+    x instanceof Uint8Array ||
+    (typeof x === 'object' && x !== null && Object.prototype.toString.call(x) === '[object Uint8Array]')
+  );
+}
+function isSAB(x: unknown): x is SharedArrayBuffer {
+  return (
+    x instanceof SharedArrayBuffer ||
+    (typeof x === 'object' && x !== null && Object.prototype.toString.call(x) === '[object SharedArrayBuffer]')
+  );
+}
+
 function toEnvelope(data: unknown): Envelope | null {
-  if (data instanceof ArrayBuffer) return { bin: new Uint8Array(data) };
-  if (data instanceof Uint8Array) return { bin: data };
+  if (isAB(data)) return { bin: new Uint8Array(data) };
+  if (isU8(data)) return { bin: data };
   if (typeof data === 'object' && data !== null && 'bin' in data) {
     const d = data as { bin: unknown; sab?: unknown };
-    const bin = d.bin instanceof ArrayBuffer ? new Uint8Array(d.bin) : d.bin instanceof Uint8Array ? d.bin : null;
+    const bin = isAB(d.bin) ? new Uint8Array(d.bin) : isU8(d.bin) ? d.bin : null;
     if (bin === null) return null;
-    const sab = d.sab instanceof SharedArrayBuffer ? d.sab : undefined;
+    const sab = isSAB(d.sab) ? d.sab : undefined;
     return { bin, sab };
   }
   return null;

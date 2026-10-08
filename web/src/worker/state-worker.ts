@@ -79,13 +79,35 @@ if ('onconnect' in scope) {
         },
         addEventListener: (type: 'message', h: (mev: MessageEvent) => void) => {
           port.addEventListener(type, (mev) => {
-            __diag('msg-received');
+            // TEMP-DIAG: port-channel breadcrumbs (locates the silent drop)
             try {
-              port.postMessage('CRUMB msg-received'); // TEMP-DIAG: port-channel breadcrumb
+              const d = mev.data as { bin?: unknown } | ArrayBuffer | Uint8Array | null;
+              let shape: string;
+              if (d instanceof ArrayBuffer || (d !== null && typeof d === 'object' && Object.prototype.toString.call(d) === '[object ArrayBuffer]')) {
+                shape = 'AB';
+              } else if (typeof d === 'object' && d !== null && 'bin' in d) {
+                const b = (d as { bin: unknown }).bin;
+                shape =
+                  'obj keys=[' + Object.keys(d).join(',') + '] binCtor=' +
+                  (b !== null && typeof b === 'object' && (b as { constructor?: { name?: string } }).constructor ? (b as { constructor: { name?: string } }).constructor.name : String(typeof b)) +
+                  ' binIsAB_local=' + (b instanceof ArrayBuffer) +
+                  ' binTag=' + (b !== null && typeof b === 'object' ? Object.prototype.toString.call(b) : 'n/a');
+              } else {
+                shape = String(typeof d);
+              }
+              port.postMessage('CRUMB msg-received shape=' + shape);
             } catch {
               /* crumb only */
             }
-            h(mev);
+            try {
+              h(mev);
+            } catch (e) {
+              try {
+                port.postMessage('CRUMB handler-threw: ' + String((e as { message?: string }).message ?? e).slice(0, 200));
+              } catch {
+                /* crumb only */
+              }
+            }
           });
         },
         start: () => {

@@ -113,14 +113,20 @@ export function connectStore(port: WirePort, opts: { ring?: SharedArrayBuffer; e
 
   port.addEventListener('message', (ev: MessageEvent) => {
     const data = ev.data as { bin?: ArrayBuffer | Uint8Array } | ArrayBuffer | Uint8Array;
-    const raw =
-      data instanceof ArrayBuffer
-        ? new Uint8Array(data)
-        : data instanceof Uint8Array
-          ? data
-          : data !== null && typeof data === 'object' && 'bin' in data && data.bin instanceof ArrayBuffer
-            ? new Uint8Array(data.bin)
-            : null;
+    // Realm-agnostic: worker→page buffers cross a structured-clone boundary.
+    const isAB = (x: unknown): x is ArrayBuffer =>
+      x instanceof ArrayBuffer ||
+      (typeof x === 'object' && x !== null && Object.prototype.toString.call(x) === '[object ArrayBuffer]');
+    const isU8 = (x: unknown): x is Uint8Array =>
+      x instanceof Uint8Array ||
+      (typeof x === 'object' && x !== null && Object.prototype.toString.call(x) === '[object Uint8Array]');
+    const raw = isAB(data)
+      ? new Uint8Array(data)
+      : isU8(data)
+        ? data
+        : data !== null && typeof data === 'object' && 'bin' in data && isAB(data.bin)
+          ? new Uint8Array(data.bin)
+          : null;
     if (raw === null) return;
     let r: BinReader;
     let header: { tag: number; seq: number };
