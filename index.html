@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your Name — Full-Stack Developer</title>
+
+  <!-- ✏️ EDIT ME: SEO / social meta -->
+  <meta name="description" content="Portfolio of Your Name — a full-stack developer building fast, accessible and beautiful web products." />
+  <meta name="author" content="Your Name" />
+  <meta property="og:title" content="Your Name — Full-Stack Developer" />
+  <meta property="og:description" content="I design and build fast, accessible and beautiful web products." />
+  <meta property="og:type" content="website" />
+  <meta name="theme-color" content="#07070c" />
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%237c5cff'/%3E%3Cstop offset='1' stop-color='%2300e5c0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' rx='24' fill='%2307070c'/%3E%3Ctext x='50' y='68' font-family='monospace' font-size='52' font-weight='700' text-anchor='middle' fill='url(%23g)'%3E%26lt;/%26gt;%3C/text%3E%3C/svg%3E" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=Cairo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="assets/css/style.css" />
+</head>
+
+<body>
+  <!-- ══════════ Background FX ══════════ -->
+  <div class="bg-fx" aria-hidden="true">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="grid-overlay"></div>
+    <div class="noise"></div>
+  </div>
+  <div class="spotlight" id="spotlight" aria-hidden="true"></div>
+  <div class="scroll-progress" id="scrollProgress" aria-hidden="true"></div>
+
+  <!-- ══════════ NAV ══════════ -->
+  <header class="nav" id="nav">
+    <nav class="nav__inner container" aria-label="Main">
+      <a href="#home" class="nav__logo">
+        <span class="logo-mark">&lt;/&gt;</span>
+        <span class="logo-text" data-en="YourName" data-ar="اسمك">YourName</span>
+      </a>
+
+      <ul class="nav__links" id="navLinks">
+        <li><a href="#home"     class="nav__link is-active" data-en="Home"      data-ar="الرئيسية">Home</a></li>
+        <li><a href="#about"    class="nav__link"           data-en="About"     data-ar="عنّي">About</a></li>
+        <li><a href="#skills"   class="nav__link"           data-en="Skills"    data-ar="المهارات">Skills</a></li>
+        <li><a href="#projects" class="nav__link"           data-en="Projects"  data-ar="المشاريع">Projects</a></li>
+        <li><a href="#journey"  class="nav__link"           data-en="Journey"   data-ar="المسيرة">Journey</a></li>
+        <li><a href="#contact"  class="nav__link"           data-en="Contact"   data-ar="تواصل">Contact</a></li>
+      </ul>
+
+      <div class="nav__actions">
+        <button class="lang-toggle" id="langToggle" type="button" aria-label="Switch language">
+          <span class="lang-toggle__on">EN</span>
+          <span class="lang-toggle__sep">/</span>
+          <span class="lang-toggle__off">ع</span>
+        </button>
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle color theme">
+          <svg class="i-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M2 12h2.4M19.6 12H22M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M19.1 4.9l-1.7 1.7M6.6 17.4l-1.7 1.7"/></svg>
+          <svg class="i-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.6A8.6 8.6 0 1 1 9.4 3.5a6.9 6.9 0 0 0 11.1 11.1Z"/></svg>
+        </button>
+        <a href="#contact" class="btn btn--sm btn--primary nav__cta">
+          <span data-en="Hire me" data-ar="وظّفني">Hire me</span>
+        </a>
+        <button class="burger" id="burger" type="button" aria-label="Open menu" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ══════════ HERO ══════════ -->
+    <section class="hero section" id="home">
+      <div class="container hero__grid">
+        <div class="hero__copy">
+          <span class="badge reveal">
+            <span class="badge__dot"></span>
+            <span data-en="Available for freelance & full-time" data-ar="متاح للعمل الحر والتوظيف">Available for freelance & full-time</span>
+          </span>
+
+          <h1 class="hero__title reveal" style="--d:.06s">
+            <span class="hero__hi" data-en="Hi, I'm" data-ar="أهلًا، أنا">Hi, I'm</span>
+            <!-- ✏️ EDIT ME: your name -->
+            <span class="grad-text" data-en="Your Name" data-ar="اسمك الكامل">Your Name</span>
+          </h1>
+
+          <p class="hero__role reveal" style="--d:.12s">
+            <span class="hero__role-static" data-en="I build " data-ar="أبني ">I build </span>
+            <span class="typed" id="typed"></span>
+            <span class="caret"></span>
+          </p>
+
+          <p class="hero__desc reveal" style="--d:.18s"
+             data-en="Full-stack developer from Cairo, Egypt. I turn ideas into fast, accessible and beautiful web products — from the database schema to the last pixel of the interface."
+             data-ar="مطوّر ويب متكامل من القاهرة، مصر. أحوّل الأفكار إلى منتجات ويب سريعة وسهلة الاستخدام وجميلة — من تصميم قاعدة البيانات حتى آخر بكسل في الواجهة.">
+            Full-stack developer from Cairo, Egypt. I turn ideas into fast, accessible and beautiful web products — from the database schema to the last pixel of the interface.
+          </p>
+
+          <div class="hero__cta reveal" style="--d:.24s">
+            <a href="#projects" class="btn btn--primary btn--lg">
+              <span data-en="View my work" data-ar="شاهد أعمالي">View my work</span>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </a>
+            <!-- ✏️ EDIT ME: link to your CV file (put it in /assets) -->
+            <a href="assets/cv.pdf" download class="btn btn--ghost btn--lg">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 11l5 5 5-5M4 21h16"/></svg>
+              <span data-en="Download CV" data-ar="تحميل السيرة الذاتية">Download CV</span>
+            </a>
+          </div>
+
+          <ul class="hero__stats reveal" style="--d:.3s">
+            <li><strong class="counter" data-target="4">0</strong><span data-en="Years experience" data-ar="سنوات خبرة">Years experience</span></li>
+            <li><strong class="counter" data-target="38">0</strong><span data-en="Projects shipped" data-ar="مشروع تم إطلاقه">Projects shipped</span></li>
+            <li><strong class="counter" data-target="21">0</strong><span data-en="Happy clients" data-ar="عميل سعيد">Happy clients</span></li>
+          </ul>
+
+          <ul class="socials reveal" style="--d:.36s">
+            <!-- ✏️ EDIT ME: your real profile links -->
+            <li><a href="https://github.com/" target="_blank" rel="noopener" aria-label="GitHub"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.3-1.7-1.3-1.7-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.8 2.75 1.28 3.42.98.1-.76.4-1.28.73-1.58-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.43-2.69 5.4-5.25 5.69.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5Z"/></svg></a></li>
+            <li><a href="https://www.linkedin.com/" target="_blank" rel="noopener" aria-label="LinkedIn"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M4.98 3.5A2.5 2.5 0 1 1 0 3.5a2.5 2.5 0 0 1 4.98 0ZM.3 8.2h4.4V24H.3V8.2Zm7.4 0h4.2v2.16h.06c.58-1.1 2-2.26 4.12-2.26 4.4 0 5.22 2.9 5.22 6.66V24h-4.4v-7.2c0-1.72-.03-3.93-2.4-3.93-2.4 0-2.77 1.87-2.77 3.8V24H7.7V8.2Z"/></svg></a></li>
+            <li><a href="https://x.com/" target="_blank" rel="noopener" aria-label="X"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M18.9 2H22l-7 8 8.2 12h-6.4l-5-7.3L5.9 22H2.8l7.4-8.4L2.3 2h6.6l4.6 6.7L18.9 2Zm-1.1 18h1.7L7.3 3.8H5.5L17.8 20Z"/></svg></a></li>
+            <li><a href="https://dribbble.com/" target="_blank" rel="noopener" aria-label="Dribbble"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M5 7c3.5 1.2 8.4 1 12.6-1.2M3.2 13.4c4-1.6 9.6-.7 12.9 4.2M8.6 2.9c3.2 3.5 5.3 8.2 6 13.6"/></svg></a></li>
+          </ul>
+        </div>
+
+        <!-- Floating code card -->
+        <div class="hero__visual reveal" style="--d:.2s">
+          <div class="orbit" aria-hidden="true">
+            <span class="orbit__ring orbit__ring--1"></span>
+            <span class="orbit__ring orbit__ring--2"></span>
+            <span class="chip chip--1">React</span>
+            <span class="chip chip--2">Node.js</span>
+            <span class="chip chip--3">TS</span>
+            <span class="chip chip--4">SQL</span>
+          </div>
+
+          <div class="code-card tilt" aria-hidden="true">
+            <div class="code-card__bar">
+              <span class="dot dot--r"></span><span class="dot dot--y"></span><span class="dot dot--g"></span>
+              <span class="code-card__file">developer.js</span>
+            </div>
+            <pre class="code-card__body"><code><span class="c-kw">const</span> <span class="c-var">me</span> = {
+  <span class="c-key">name</span>: <span class="c-str">'Your Name'</span>,
+  <span class="c-key">role</span>: <span class="c-str">'Full-Stack Dev'</span>,
+  <span class="c-key">stack</span>: [<span class="c-str">'React'</span>, <span class="c-str">'Node'</span>, <span class="c-str">'Postgres'</span>],
+  <span class="c-key">location</span>: <span class="c-str">'Cairo, EG'</span>,
+  <span class="c-fn">ship</span>() {
+    <span class="c-kw">return</span> <span class="c-str">'🚀 clean, fast code'</span>;
+  }
+};</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <a href="#about" class="scroll-hint" aria-label="Scroll down">
+        <span class="scroll-hint__mouse"><span class="scroll-hint__wheel"></span></span>
+      </a>
+    </section>
+
+    <!-- ══════════ ABOUT ══════════ -->
+    <section class="section" id="about">
+      <div class="container">
+        <header class="section__head reveal">
+          <span class="section__eyebrow" data-en="01 — About" data-ar="٠١ — عنّي">01 — About</span>
+          <h2 class="section__title" data-en="A developer who cares about the details" data-ar="مطوّر يهتم بأدق التفاصيل">A developer who cares about the details</h2>
+        </header>
+
+        <div class="about__grid">
+          <div class="about__portrait reveal">
+            <div class="portrait">
+              <!-- ✏️ EDIT ME: replace with <img src="assets/img/me.jpg" alt="Your Name"> -->
+              <div class="portrait__mono">YN</div>
+              <div class="portrait__glow"></div>
+            </div>
+            <ul class="about__facts">
+              <li><span data-en="Based in" data-ar="الموقع">Based in</span><strong data-en="Cairo, Egypt" data-ar="القاهرة، مصر">Cairo, Egypt</strong></li>
+              <li><span data-en="Experience" data-ar="الخبرة">Experience</span><strong data-en="4+ years" data-ar="+٤ سنوات">4+ years</strong></li>
+              <li><span data-en="Languages" data-ar="اللغات">Languages</span><strong data-en="Arabic, English" data-ar="العربية، الإنجليزية">Arabic, English</strong></li>
+              <li><span data-en="Freelance" data-ar="العمل الحر">Freelance</span><strong class="ok" data-en="Available" data-ar="متاح">Available</strong></li>
+            </ul>
+          </div>
+
+          <div class="about__body reveal" style="--d:.1s">
+            <p data-en="I started writing code because I wanted to build things people actually use. Four years later that's still the goal — only now I care just as much about the invisible parts: load times, accessibility, error handling, and code the next developer can read at 2 a.m."
+               data-ar="بدأت أكتب الكود لأنني أردت بناء أشياء يستخدمها الناس فعلًا. بعد أربع سنوات ما زال هذا هو الهدف — لكنني الآن أهتم بنفس القدر بالأجزاء غير المرئية: سرعة التحميل، وإتاحة الاستخدام للجميع، ومعالجة الأخطاء، وكود يستطيع المطوّر التالي قراءته في الثانية صباحًا.">
+              I started writing code because I wanted to build things people actually use. Four years later that's still the goal — only now I care just as much about the invisible parts: load times, accessibility, error handling, and code the next developer can read at 2 a.m.
+            </p>
+            <p data-en="I work across the stack: React and TypeScript on the front, Node.js and PostgreSQL on the back, deployed on modern cloud infrastructure. I've shipped dashboards, e-commerce stores, internal tools and marketing sites — for startups and for established companies."
+               data-ar="أعمل عبر المكدّس بالكامل: React و TypeScript في الواجهة، و Node.js و PostgreSQL في الخلفية، مع نشر على بنية سحابية حديثة. أطلقت لوحات تحكم ومتاجر إلكترونية وأدوات داخلية ومواقع تعريفية — لشركات ناشئة وأخرى راسخة.">
+              I work across the stack: React and TypeScript on the front, Node.js and PostgreSQL on the back, deployed on modern cloud infrastructure. I've shipped dashboards, e-commerce stores, internal tools and marketing sites — for startups and for established companies.
+            </p>
+
+            <div class="about__values">
+              <article class="value">
+                <span class="value__ico">⚡</span>
+                <h3 data-en="Performance first" data-ar="الأداء أولًا">Performance first</h3>
+                <p data-en="Every feature pays a cost. I measure it, then make it cheap." data-ar="كل ميزة لها تكلفة. أقيسها ثم أجعلها منخفضة.">Every feature pays a cost. I measure it, then make it cheap.</p>
+              </article>
+              <article class="value">
+                <span class="value__ico">♿</span>
+                <h3 data-en="Accessible by default" data-ar="إتاحة افتراضية">Accessible by default</h3>
+                <p data-en="Semantic HTML, keyboard flows, real contrast ratios." data-ar="HTML دلالي، تنقّل بلوحة المفاتيح، وتباين ألوان حقيقي.">Semantic HTML, keyboard flows, real contrast ratios.</p>
+              </article>
+              <article class="value">
+                <span class="value__ico">🧩</span>
+                <h3 data-en="Systems, not pages" data-ar="أنظمة لا صفحات">Systems, not pages</h3>
+                <p data-en="Reusable components and clean APIs that survive growth." data-ar="مكوّنات قابلة لإعادة الاستخدام وواجهات برمجية تصمد مع النمو.">Reusable components and clean APIs that survive growth.</p>
+              </article>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ SKILLS ══════════ -->
+    <section class="section section--alt" id="skills">
+      <div class="container">
+        <header class="section__head reveal">
+          <span class="section__eyebrow" data-en="02 — Skills" data-ar="٠٢ — المهارات">02 — Skills</span>
+          <h2 class="section__title" data-en="The toolbox" data-ar="صندوق الأدوات">The toolbox</h2>
+          <p class="section__lead" data-en="Technologies I use daily, and how deep I go with each." data-ar="التقنيات التي أستخدمها يوميًا، ومدى تعمّقي في كلٍّ منها.">Technologies I use daily, and how deep I go with each.</p>
+        </header>
+
+        <div class="skills__grid">
+          <article class="skill-card reveal">
+            <h3 class="skill-card__title"><span class="skill-card__ico">🎨</span><span data-en="Frontend" data-ar="الواجهة الأمامية">Frontend</span></h3>
+            <div class="bars">
+              <div class="bar" data-level="95"><span data-en="React / Next.js" data-ar="React / Next.js">React / Next.js</span><i></i></div>
+              <div class="bar" data-level="92"><span>TypeScript</span><i></i></div>
+              <div class="bar" data-level="96"><span>CSS / Tailwind / Sass</span><i></i></div>
+              <div class="bar" data-level="85"><span>Vue 3</span><i></i></div>
+            </div>
+          </article>
+
+          <article class="skill-card reveal" style="--d:.08s">
+            <h3 class="skill-card__title"><span class="skill-card__ico">⚙️</span><span data-en="Backend" data-ar="الخلفية">Backend</span></h3>
+            <div class="bars">
+              <div class="bar" data-level="90"><span>Node.js / Express</span><i></i></div>
+              <div class="bar" data-level="84"><span>Python / FastAPI</span><i></i></div>
+              <div class="bar" data-level="88"><span>PostgreSQL / MongoDB</span><i></i></div>
+              <div class="bar" data-level="80"><span>GraphQL / REST</span><i></i></div>
+            </div>
+          </article>
+
+          <article class="skill-card reveal" style="--d:.16s">
+            <h3 class="skill-card__title"><span class="skill-card__ico">🚀</span><span data-en="DevOps & Tools" data-ar="العمليات والأدوات">DevOps & Tools</span></h3>
+            <div class="bars">
+              <div class="bar" data-level="86"><span>Docker</span><i></i></div>
+              <div class="bar" data-level="82"><span>CI/CD · GitHub Actions</span><i></i></div>
+              <div class="bar" data-level="78"><span>AWS / Vercel</span><i></i></div>
+              <div class="bar" data-level="90"><span>Git / Linux</span><i></i></div>
+            </div>
+          </article>
+
+          <article class="skill-card reveal" style="--d:.24s">
+            <h3 class="skill-card__title"><span class="skill-card__ico">🧠</span><span data-en="Also in the mix" data-ar="أيضًا ضمن العمل">Also in the mix</span></h3>
+            <div class="tags">
+              <span class="tag">Figma</span><span class="tag">Jest</span><span class="tag">Playwright</span>
+              <span class="tag">Redis</span><span class="tag">WebSockets</span><span class="tag">i18n / RTL</span>
+              <span class="tag">SEO</span><span class="tag">Stripe</span><span class="tag">Prisma</span>
+              <span class="tag">Agile / Scrum</span>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ PROJECTS ══════════ -->
+    <section class="section" id="projects">
+      <div class="container">
+        <header class="section__head reveal">
+          <span class="section__eyebrow" data-en="03 — Projects" data-ar="٠٣ — المشاريع">03 — Projects</span>
+          <h2 class="section__title" data-en="Selected work" data-ar="أعمال مختارة">Selected work</h2>
+          <p class="section__lead" data-en="A few things I designed, built and shipped." data-ar="نماذج من أشياء صممتها وبنتها وأطلقتها.">A few things I designed, built and shipped.</p>
+        </header>
+
+        <div class="filters reveal" id="filters" role="tablist" aria-label="Filter projects">
+          <button class="filter is-active" data-filter="all"   data-en="All"       data-ar="الكل">All</button>
+          <button class="filter" data-filter="web"     data-en="Web Apps"  data-ar="تطبيقات ويب">Web Apps</button>
+          <button class="filter" data-filter="commerce" data-en="E-commerce" data-ar="تجارة إلكترونية">E-commerce</button>
+          <button class="filter" data-filter="ui"      data-en="UI / Design" data-ar="واجهات وتصميم">UI / Design</button>
+          <button class="filter" data-filter="api"     data-en="API / Backend" data-ar="واجهات برمجية">API / Backend</button>
+        </div>
+
+        <!-- ✏️ EDIT ME: replace these projects with your real ones -->
+        <div class="projects__grid" id="projectsGrid">
+          <article class="project tilt reveal" data-cat="web">
+            <div class="project__thumb thumb--1">
+              <span class="project__emoji">📊</span>
+              <div class="project__overlay">
+                <a class="icon-btn" href="#" aria-label="Live demo"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>
+                <a class="icon-btn" href="#" aria-label="Source code"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.3-1.7-1.3-1.7-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.8 2.75 1.28 3.42.98.1-.76.4-1.28.73-1.58-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.43-2.69 5.4-5.25 5.69.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5Z"/></svg></a>
+              </div>
+            </div>
+            <div class="project__body">
+              <span class="project__year">2025</span>
+              <h3 class="project__title" data-en="Pulse Analytics Dashboard" data-ar="لوحة تحليلات Pulse">Pulse Analytics Dashboard</h3>
+              <p class="project__desc" data-en="Real-time analytics platform rendering 50k data points with sub-100ms interactions. Custom virtualized charts and role-based access." data-ar="منصة تحليلات فورية تعرض ٥٠ ألف نقطة بيانات بزمن استجابة أقل من ١٠٠ ملّي ثانية، مع رسوم بيانية مخصّصة وصلاحيات حسب الدور.">Real-time analytics platform rendering 50k data points with sub-100ms interactions. Custom virtualized charts and role-based access.</p>
+              <ul class="project__tags"><li>Next.js</li><li>TypeScript</li><li>D3</li><li>WebSocket</li></ul>
+            </div>
+          </article>
+
+          <article class="project tilt reveal" data-cat="commerce" style="--d:.06s">
+            <div class="project__thumb thumb--2">
+              <span class="project__emoji">🛍️</span>
+              <div class="project__overlay">
+                <a class="icon-btn" href="#" aria-label="Live demo"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>
+                <a class="icon-btn" href="#" aria-label="Source code"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.3-1.7-1.3-1.7-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.8 2.75 1.28 3.42.98.1-.76.4-1.28.73-1.58-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.43-2.69 5.4-5.25 5.69.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5Z"/></svg></a>
+              </div>
+            </div>
+            <div class="project__body">
+              <span class="project__year">2025</span>
+              <h3 class="project__title" data-en="Souq — Bilingual Storefront" data-ar="سوق — متجر ثنائي اللغة">Souq — Bilingual Storefront</h3>
+              <p class="project__desc" data-en="Headless e-commerce for an Egyptian brand: full Arabic/English RTL support, Stripe + local payment gateways, 98 Lighthouse score." data-ar="متجر بلا رأس لعلامة مصرية: دعم كامل للعربية والإنجليزية مع RTL، وبوابات دفع محلية و Stripe، ودرجة ٩٨ على Lighthouse.">Headless e-commerce for an Egyptian brand: full Arabic/English RTL support, Stripe + local payment gateways, 98 Lighthouse score.</p>
+              <ul class="project__tags"><li>React</li><li>Node.js</li><li>Stripe</li><li>PostgreSQL</li></ul>
+            </div>
+          </article>
+
+          <article class="project tilt reveal" data-cat="ui" style="--d:.12s">
+            <div class="project__thumb thumb--3">
+              <span class="project__emoji">🎧</span>
+              <div class="project__overlay">
+                <a class="icon-btn" href="#" aria-label="Live demo"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>
+                <a class="icon-btn" href="#" aria-label="Source code"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.3-1.7-1.3-1.7-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.8 2.75 1.28 3.42.98.1-.76.4-1.28.73-1.58-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.43-2.69 5.4-5.25 5.69.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5Z"/></svg></a>
+              </div>
+            </div>
+            <div class="project__body">
+              <span class="project__year">2024</span>
+              <h3 class="project__title" data-en="Waves Music Player" data-ar="مشغّل الموسيقى Waves">Waves Music Player</h3>
+              <p class="project__desc" data-en="A Web Audio visualizer with gesture controls and an offline-first queue. Design system built from scratch in Figma, then coded." data-ar="مُصوّر صوتي عبر Web Audio مع تحكّم بالإيماءات وقائمة تعمل دون اتصال. نظام تصميم بُني من الصفر في Figma ثم تُرجم إلى كود.">A Web Audio visualizer with gesture controls and an offline-first queue. Design system built from scratch in Figma, then coded.</p>
+              <ul class="project__tags"><li>Vue 3</li><li>Web Audio</li><li>Figma</li><li>PWA</li></ul>
+            </div>
+          </article>
+
+          <article class="project tilt reveal" data-cat="api" style="--d:.18s">
+            <div class="project__thumb thumb--4">
+              <span class="project__emoji">🔐</span>
+              <div class="project__overlay">
+                <a class="icon-btn" href="#" aria-label="Live demo"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>
+                <a class="icon-btn" href="#" aria-label="Source code"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.3-1.7-1.3-1.7-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.8 2.75 1.28 3.42.98.1-.76.4-1.28.73-1.58-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.43-2.69 5.4-5.25 5.69.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5Z"/></svg></a>
+              </div>
+            </div>
+            <div class="project__body">
+              <span class="project__year">2024</span>
+              <h3 class="project__title" data-en="AuthKit — Auth Microservice" data-ar="AuthKit — خدمة مصغّرة للمصادقة">AuthKit — Auth Microservice</h3>
+              <p class="project__desc" data-en="Drop-in authentication service: OAuth, MFA, refresh-token rotation and audit logs. Handles 1.2M requests/day behind a rate limiter." data-ar="خدمة مصادقة جاهزة للتركيب: OAuth ومصادقة ثنائية وتدوير رموز التحديث وسجل تدقيق. تتعامل مع ١٫٢ مليون طلب يوميًا خلف محدِّد معدّل.">Drop-in authentication service: OAuth, MFA, refresh-token rotation and audit logs. Handles 1.2M requests/day behind a rate limiter.</p>
+              <ul class="project__tags"><li>Node.js</li><li>Redis</li><li>Docker</li><li>OAuth2</li></ul>
+            </div>
+          </article>
+
+          <article class="project tilt reveal" data-cat="web" style="--d:.24s">
+            <div class="project__thumb thumb--5">
+              <span class="project__emoji">🩺</span>
+              <div class="project__overlay">
+                <a class="icon-btn" href="#" aria-label="Live demo"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>
+                <a class="icon-btn" href="#" aria-label="Source code"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.3-1.7-1.3-1.7-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.8 2.75 1.28 3.42.98.1-.76.4-1.28.73-1.58-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.43-2.69 5.4-5.25 5.69.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5Z"/></svg></a>
+              </div>
+            </div>
+            <div class="project__body">
+              <span class="project__year">2023</span>
+              <h3 class="project__title" data-en="Seha Clinic Booking" data-ar="صحة — حجز العيادات">Seha Clinic Booking</h3>
+              <p class="project__desc" data-en="Booking system for 40+ clinics: doctor calendars, SMS reminders in Arabic, and a patient history timeline. Cut no-shows by 31%." data-ar="نظام حجز لأكثر من ٤٠ عيادة: تقويمات للأطباء، وتذكير برسائل SMS بالعربية، وخط زمني لملف المريض. خفّض حالات عدم الحضور بنسبة ٣١٪.">Booking system for 40+ clinics: doctor calendars, SMS reminders in Arabic, and a patient history timeline. Cut no-shows by 31%.</p>
+              <ul class="project__tags"><li>React</li><li>FastAPI</li><li>PostgreSQL</li><li>Twilio</li></ul>
+            </div>
+          </article>
+
+          <article class="project tilt reveal" data-cat="ui" style="--d:.3s">
+            <div class="project__thumb thumb--6">
+              <span class="project__emoji">🌤️</span>
+              <div class="project__overlay">
+                <a class="icon-btn" href="#" aria-label="Live demo"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>
+                <a class="icon-btn" href="#" aria-label="Source code"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.3-1.7-1.3-1.7-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.8 2.75 1.28 3.42.98.1-.76.4-1.28.73-1.58-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.43-2.69 5.4-5.25 5.69.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5Z"/></svg></a>
+              </div>
+            </div>
+            <div class="project__body">
+              <span class="project__year">2023</span>
+              <h3 class="project__title" data-en="Nile Weather — Open Source" data-ar="طقس النيل — مفتوح المصدر">Nile Weather — Open Source</h3>
+              <p class="project__desc" data-en="A tiny (14 kB) weather app with animated SVG skies, geolocation and a full offline cache. 600+ stars on GitHub." data-ar="تطبيق طقس صغير الحجم (١٤ كيلوبايت) بسماء SVG متحركة وتحديد الموقع وتخزين كامل دون اتصال. أكثر من ٦٠٠ نجمة على GitHub.">A tiny (14 kB) weather app with animated SVG skies, geolocation and a full offline cache. 600+ stars on GitHub.</p>
+              <ul class="project__tags"><li>Svelte</li><li>SVG</li><li>Service Worker</li></ul>
+            </div>
+          </article>
+        </div>
+
+        <p class="empty-state" id="emptyState" hidden data-en="No projects in this category yet." data-ar="لا توجد مشاريع في هذا التصنيف بعد.">No projects in this category yet.</p>
+      </div>
+    </section>
+
+    <!-- ══════════ JOURNEY ══════════ -->
+    <section class="section section--alt" id="journey">
+      <div class="container">
+        <header class="section__head reveal">
+          <span class="section__eyebrow" data-en="04 — Journey" data-ar="٠٤ — المسيرة">04 — Journey</span>
+          <h2 class="section__title" data-en="Experience & education" data-ar="الخبرة والتعليم">Experience & education</h2>
+        </header>
+
+        <!-- ✏️ EDIT ME: your real timeline -->
+        <ol class="timeline">
+          <li class="tl-item reveal">
+            <span class="tl-dot"></span>
+            <div class="tl-card">
+              <span class="tl-when">2024 — <span data-en="Present" data-ar="الحالي">Present</span></span>
+              <h3 class="tl-role" data-en="Senior Full-Stack Developer" data-ar="مطوّر ويب متكامل أول">Senior Full-Stack Developer</h3>
+              <p class="tl-org">Nile Tech · Cairo</p>
+              <p class="tl-text" data-en="Leading a team of four on a B2B SaaS platform. Cut average page load from 4.1s to 1.2s and introduced the design system now used by three product teams." data-ar="أقود فريقًا من أربعة أشخاص على منصة SaaS للشركات. خفّضت متوسط زمن تحميل الصفحة من ٤٫١ ثانية إلى ١٫٢ ثانية، وأطلقت نظام التصميم الذي تستخدمه ثلاثة فرق الآن.">Leading a team of four on a B2B SaaS platform. Cut average page load from 4.1s to 1.2s and introduced the design system now used by three product teams.</p>
+            </div>
+          </li>
+          <li class="tl-item reveal" style="--d:.08s">
+            <span class="tl-dot"></span>
+            <div class="tl-card">
+              <span class="tl-when">2022 — 2024</span>
+              <h3 class="tl-role" data-en="Frontend Developer" data-ar="مطوّر واجهات أمامية">Frontend Developer</h3>
+              <p class="tl-org">Pyramid Studio · Remote</p>
+              <p class="tl-text" data-en="Built 20+ client sites and dashboards in React and Vue. Owned accessibility, pushing every deliverable to WCAG 2.1 AA." data-ar="بنيت أكثر من ٢٠ موقعًا ولوحة تحكم للعملاء باستخدام React و Vue. تولّيت ملف الإتاحة ورفعت كل مخرَج إلى مستوى WCAG 2.1 AA.">Built 20+ client sites and dashboards in React and Vue. Owned accessibility, pushing every deliverable to WCAG 2.1 AA.</p>
+            </div>
+          </li>
+          <li class="tl-item reveal" style="--d:.16s">
+            <span class="tl-dot"></span>
+            <div class="tl-card">
+              <span class="tl-when">2021 — 2022</span>
+              <h3 class="tl-role" data-en="Junior Web Developer" data-ar="مطوّر ويب مبتدئ">Junior Web Developer</h3>
+              <p class="tl-org">Freelance</p>
+              <p class="tl-text" data-en="Landed my first clients on Upwork and locally: landing pages, WordPress builds, then custom React apps as my skills grew." data-ar="حصلت على أول عملائي عبر Upwork ومحليًا: صفحات هبوط ومواقع WordPress، ثم تطبيقات React مخصّصة مع تطوّر مهاراتي.">Landed my first clients on Upwork and locally: landing pages, WordPress builds, then custom React apps as my skills grew.</p>
+            </div>
+          </li>
+          <li class="tl-item reveal" style="--d:.24s">
+            <span class="tl-dot tl-dot--edu"></span>
+            <div class="tl-card">
+              <span class="tl-when">2017 — 2021</span>
+              <h3 class="tl-role" data-en="B.Sc. Computer Science" data-ar="بكالوريوس علوم الحاسب">B.Sc. Computer Science</h3>
+              <p class="tl-org" data-en="Cairo University · Grade: Very Good" data-ar="جامعة القاهرة · التقدير: جيد جدًا">Cairo University · Grade: Very Good</p>
+              <p class="tl-text" data-en="Graduation project: an Arabic NLP tool for summarizing news articles, built with Python and scikit-learn." data-ar="مشروع التخرّج: أداة معالجة لغة طبيعية عربية لتلخيص الأخبار، بُنيت باستخدام Python و scikit-learn.">Graduation project: an Arabic NLP tool for summarizing news articles, built with Python and scikit-learn.</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ══════════ CTA STRIP ══════════ -->
+    <section class="cta-strip">
+      <div class="container cta-strip__inner reveal">
+        <div>
+          <h2 data-en="Have a project in mind?" data-ar="عندك فكرة مشروع؟">Have a project in mind?</h2>
+          <p data-en="Let's talk about it — I usually reply within 24 hours." data-ar="لنتحدث عنه — أردّ عادةً خلال ٢٤ ساعة.">Let's talk about it — I usually reply within 24 hours.</p>
+        </div>
+        <a href="#contact" class="btn btn--primary btn--lg">
+          <span data-en="Start a conversation" data-ar="ابدأ المحادثة">Start a conversation</span>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </a>
+      </div>
+    </section>
+
+    <!-- ══════════ CONTACT ══════════ -->
+    <section class="section" id="contact">
+      <div class="container">
+        <header class="section__head reveal">
+          <span class="section__eyebrow" data-en="05 — Contact" data-ar="٠٥ — تواصل">05 — Contact</span>
+          <h2 class="section__title" data-en="Let's build something" data-ar="لنبني شيئًا معًا">Let's build something</h2>
+        </header>
+
+        <div class="contact__grid">
+          <div class="contact__info reveal">
+            <!-- ✏️ EDIT ME: your real contact details -->
+            <a class="info-card" href="mailto:hello@yourdomain.com">
+              <span class="info-card__ico">✉️</span>
+              <span class="info-card__label" data-en="Email" data-ar="البريد الإلكتروني">Email</span>
+              <span class="info-card__value">hello@yourdomain.com</span>
+            </a>
+            <a class="info-card" href="tel:+201000000000">
+              <span class="info-card__ico">📱</span>
+              <span class="info-card__label" data-en="Phone / WhatsApp" data-ar="الهاتف / واتساب">Phone / WhatsApp</span>
+              <span class="info-card__value" dir="ltr">+20 100 000 0000</span>
+            </a>
+            <div class="info-card">
+              <span class="info-card__ico">📍</span>
+              <span class="info-card__label" data-en="Location" data-ar="الموقع">Location</span>
+              <span class="info-card__value" data-en="Cairo, Egypt — open to remote" data-ar="القاهرة، مصر — متاح للعمل عن بُعد">Cairo, Egypt — open to remote</span>
+            </div>
+            <div class="info-card">
+              <span class="info-card__ico">🕐</span>
+              <span class="info-card__label" data-en="Response time" data-ar="زمن الرد">Response time</span>
+              <span class="info-card__value" data-en="Within 24 hours" data-ar="خلال ٢٤ ساعة">Within 24 hours</span>
+            </div>
+          </div>
+
+          <form class="contact__form reveal" id="contactForm" style="--d:.1s" novalidate>
+            <div class="field">
+              <label for="name" data-en="Your name" data-ar="اسمك">Your name</label>
+              <input id="name" name="name" type="text" required autocomplete="name" placeholder="Jane Doe" />
+            </div>
+            <div class="field">
+              <label for="email" data-en="Email" data-ar="البريد الإلكتروني">Email</label>
+              <input id="email" name="email" type="email" required autocomplete="email" placeholder="jane@company.com" />
+            </div>
+            <div class="field">
+              <label for="subject" data-en="Subject" data-ar="الموضوع">Subject</label>
+              <input id="subject" name="subject" type="text" placeholder="New project inquiry" />
+            </div>
+            <div class="field">
+              <label for="message" data-en="Message" data-ar="الرسالة">Message</label>
+              <textarea id="message" name="message" rows="5" required placeholder="Tell me about your project…"></textarea>
+            </div>
+            <button type="submit" class="btn btn--primary btn--lg btn--full">
+              <span data-en="Send message" data-ar="إرسال الرسالة">Send message</span>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z"/></svg>
+            </button>
+            <p class="form-note" id="formNote" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ══════════ FOOTER ══════════ -->
+  <footer class="footer">
+    <div class="container footer__inner">
+      <p class="footer__brand"><span class="logo-mark">&lt;/&gt;</span> <span data-en="Your Name" data-ar="اسمك الكامل">Your Name</span></p>
+      <p class="footer__copy">© <span id="year">2026</span> — <span data-en="Designed & built from scratch." data-ar="صُمّم وبُني من الصفر.">Designed & built from scratch.</span></p>
+      <a href="#home" class="footer__top" data-en="Back to top ↑" data-ar="إلى الأعلى ↑">Back to top ↑</a>
+    </div>
+  </footer>
+
+  <button class="to-top" id="toTop" type="button" aria-label="Back to top">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+  </button>
+
+  <script src="assets/js/main.js" defer></script>
+</body>
+</html>
