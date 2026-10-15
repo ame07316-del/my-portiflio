@@ -20,6 +20,7 @@ function fail() {
   loading.hidden = true;
   fallback.hidden = false;
   canvas.style.display = 'none';
+  document.body.classList.add('no-webgl');   // البديل الخطي يظهر فورًا — مفيش فراغ
 }
 
 let renderer;
@@ -114,6 +115,8 @@ if (renderer) {
     const t = clock.getElapsedTime();
     hold += (holdTarget - hold) * .06;
     fill.style.width = (hold * 100).toFixed(1) + '%';
+    const h1 = hold > .45 ? '1' : '0';
+    if (document.body.dataset.hold !== h1) document.body.dataset.hold = h1;  // التعليقات تضيء بالترتيب
 
     rig.rotation.y = t * (.18 + hold * 1.6) + scrollY * .0005;
     rig.rotation.x = Math.sin(t * .3) * .06 + py * .12;

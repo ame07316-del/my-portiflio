@@ -35,7 +35,7 @@
 
   /* ════════ 2 · كشف على مستوى الكلمة (آمن للعربي — ميتكسرش اتصال الحروف) ════════
      بيشتغل بعد تطبيق اللغة، وبيعيد التقسيم لو اللغة اتغيرت. */
-  const WORD_SPLIT = ['.hero__word-in', '.works__title', '.contact__title', '.about__line', '.hero__q'];
+  const WORD_SPLIT = ['.hero__word-in', '.works__title', '.contact__title', '.about__line', '.hero__manifesto'];
   function splitWords(el) {
     if (el.dataset.splitLang === lang) return;
     el.dataset.splitLang = lang;
@@ -68,9 +68,18 @@
   function killLenis() { if (lenis) { lenis.destroy(); lenis = null; } }
 
   const bar = $('#scrollProgress');
+  const strip = $('.strip');
+  let lastY = scrollY, skew = 0, skewRaf = 0;
   addEventListener('scroll', () => {
     const max = document.documentElement.scrollHeight - innerHeight;
     bar.style.transform = `scaleX(${max > 0 ? scrollY / max : 0})`;
+    /* السرعة تحرف شريط المهارات — حركة ترد على فعل الزائر */
+    skew = clamp((scrollY - lastY) * .12, -7, 7); lastY = scrollY;
+    if (strip) strip.style.transform = `skewY(${skew.toFixed(2)}deg)`;
+    cancelAnimationFrame(skewRaf);
+    const relax = () => { skew *= .86; if (strip) strip.style.transform = `skewY(${skew.toFixed(2)}deg)`;
+      if (Math.abs(skew) > .05) skewRaf = requestAnimationFrame(relax); };
+    skewRaf = requestAnimationFrame(relax);
   }, { passive: true });
 
   /* ════════ 4 · WORKS WHEEL ════════ */
@@ -104,12 +113,48 @@
       const li = document.createElement('li');
       const b = document.createElement('button');
       b.type = 'button';
-      b.textContent = cardTitle(c);
+      const n = document.createElement('span'); n.textContent = pad(i); n.style.opacity = .55;
+      b.appendChild(n);
+      b.appendChild(document.createTextNode(' ' + cardTitle(c)));
       b.setAttribute('aria-label', (lang === 'ar' ? 'انتقل إلى ' : 'Go to ') + cardTitle(c));
       b.addEventListener('click', () => goTo(i));
       li.appendChild(b); idxEl.appendChild(li);
     });
+    buildLabIndex();
   }
+
+  /* فهرس المختبر: تسلسل حقيقي 01–05 (التجارب المعملية فقط) يقفز للعجلة */
+  function buildLabIndex() {
+    const list = $('#labList');
+    if (!list) return;
+    list.innerHTML = '';
+    cards.forEach((c, i) => {
+      if (c.dataset.kind !== 'lab') return;
+      const li = document.createElement('li');
+      const b = document.createElement('button'); b.type = 'button';
+      const num = c.querySelector('.card__idx')?.textContent || '';
+      const desc = c.querySelector('.card__desc');
+      b.innerHTML = `<span class="li-n">${num}</span><span class="li-t"></span><span class="li-d"></span>`;
+      b.querySelector('.li-t').textContent = cardTitle(c);
+      b.querySelector('.li-d').textContent = (desc?.textContent || '').slice(0, 90) + '…';
+      b.addEventListener('click', () => {
+        $('#works').scrollIntoView({ behavior: motionOn ? 'smooth' : 'auto' });
+        goTo(i);
+      });
+      li.appendChild(b); list.appendChild(li);
+    });
+  }
+
+  /* نسخ حقيقي بقيمة واضحة بعد الفعل */
+  $$('.copy').forEach(btn => btn.addEventListener('click', async () => {
+    const v = btn.dataset.copy || '';
+    try { await navigator.clipboard.writeText(v); }
+    catch { const t = document.createElement('textarea'); t.value = v; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+    const old = btn.textContent;
+    btn.textContent = lang === 'ar' ? 'اتنسخ ✔' : 'COPIED ✔';
+    btn.classList.add('is-done');
+    setTimeout(() => { btn.textContent = old; btn.classList.remove('is-done'); }, 1400);
+  }));
 
   function refreshWheelText() {
     const a = clamp(Math.round(f), 0, N - 1);
@@ -252,7 +297,7 @@
       const data = await r.json();
       if (data.settings?.theme) root.dataset.theme = data.settings.theme;
       const c = data.settings?.contact;
-      if (c) $$('.cline').forEach(a => {
+      if (c) $$('.cline a').forEach(a => {
         const h = a.getAttribute('href') || '';
         if (h.startsWith('mailto:')) a.href = 'mailto:' + c.email;
         else if (h.includes('wa.me')) a.href = 'https://wa.me/' + (c.whatsapp || '').replace(/[^\d]/g, '');

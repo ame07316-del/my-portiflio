@@ -11,12 +11,10 @@
   <meta property="og:description" content="أعمال حقيقية موثّقة وتجارب معملية في الحركة والـ 3D." />
   <meta property="og:type" content="website" />
 
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230A0B10'/%3E%3Ccircle cx='32' cy='32' r='17' fill='none' stroke='%2300F0FF' stroke-width='3'/%3E%3Ccircle cx='32' cy='32' r='7' fill='%238A2BE2'/%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230A0B10'/%3E%3Ccircle cx='32' cy='18' r='7' fill='none' stroke='%2300F0FF' stroke-width='3'/%3E%3Cpath d='M32 25v22M24 32h16M26 47l-4 12M38 47l4 12' stroke='%23F0F4FC' stroke-width='3' fill='none'/%3E%3C/svg%3E" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <!-- Space Grotesk: عناوين لاتينية · Plus Jakarta Sans: نصوص لاتينية · Space Mono: تسميات تقنية
-       البدائل العربية: Cairo للعناوين، IBM Plex Sans Arabic للنصوص -->
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Plus+Jakarta+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&family=Cairo:wght@600;800;900&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet" />
 
   <link rel="stylesheet" href="assets/css/style.css" />
@@ -33,11 +31,11 @@
 
 <body>
   <a class="skip" href="#works" data-ar="تخطَّ إلى الأعمال" data-en="SKIP TO WORKS">تخطَّ إلى الأعمال</a>
-  <!-- ═══════════ خلفية: شبكة نقط halftone + توهج محكوم بحالة ═══════════ -->
+
+  <!-- ═══════════ خلفية: شبكة قياس ثابتة (بلا توهج محيطي) ═══════════ -->
   <div class="bg" aria-hidden="true">
     <div class="bg__dots"></div>
-    <div class="bg__glow bg__glow--cyan"></div>
-    <div class="bg__glow bg__glow--violet"></div>
+    <div class="bg__scan"></div>
   </div>
   <div class="scrollbar-progress" id="scrollProgress" aria-hidden="true"></div>
 
@@ -47,62 +45,84 @@
       <a class="hdr__logo" href="#top">
         <span class="hdr__logo-mark" aria-hidden="true"></span>
         <span class="hdr__logo-text" data-ar="عمرو" data-en="AMR">عمرو</span>
-        <span class="hdr__logo-sub mono" data-ar="ويب ديفيلوبر" data-en="WEB DEV">ويب ديفيلوبر</span>
       </a>
-
       <nav class="hdr__nav mono" aria-label="Main">
         <a href="#works"    class="hdr__link" data-ar="[الأعمال]"  data-en="[WORK]">[الأعمال]</a>
-        <a href="#specialty" class="hdr__link" data-ar="[التخصص]"   data-en="[STACK]">[التخصص]</a>
+        <a href="#specialty" class="hdr__link" data-ar="[التخصص]"  data-en="[STACK]">[التخصص]</a>
         <a href="#contact"  class="hdr__link" data-ar="[تواصل]"    data-en="[CONTACT]">[تواصل]</a>
       </nav>
-
-      <div class="hdr__tools">
-        <button class="tool mono" id="langBtn" type="button" aria-label="تبديل اللغة / Switch language">
-          <span class="tool__on" data-ar="AR" data-en="EN">AR</span><span class="tool__sep">/</span><span class="tool__off" data-ar="EN" data-en="AR">EN</span>
-        </button>
-      </div>
+      <button class="tool mono" id="langBtn" type="button" aria-label="تبديل اللغة / Switch language">
+        <span class="tool__on" data-ar="AR" data-en="EN">AR</span><span class="tool__sep">/</span><span class="tool__off" data-ar="EN" data-en="AR">EN</span>
+      </button>
     </div>
   </header>
 
   <main id="top">
-    <!-- ═══════════ HERO — مش قالب عنوان/زرين/صورة ═══════════ -->
+    <!-- ═══════════ مسرح العينة ═══════════ -->
     <section class="hero" id="home" aria-label="Intro">
-      <h1 class="hero__word" id="heroWord"><span class="hero__word-in" data-ar="عمرو" data-en="AMR">عمرو</span></h1>
+      <div class="hero__grid">
+        <div class="hero__left">
+          <p class="hero__kicker mono">SPECIMEN 01 — skeleton.glb · 45 BONES</p>
+          <h1 class="hero__word"><span class="hero__word-in" data-ar="عمرو" data-en="AMR">عمرو</span></h1>
+          <p class="hero__outline" aria-hidden="true"><span data-ar="مطوّر ويب" data-en="WEB DEVELOPER">مطوّر ويب</span></p>
+          <p class="hero__manifesto" data-ar="أبني ويب سريعًا وموثوقًا — من أول بكسل في الواجهة لآخر استعلام في قاعدة البيانات."
+             data-en="I build fast, dependable web — from the first pixel of the interface to the last query in the database.">أبني ويب سريعًا وموثوقًا — من أول بكسل في الواجهة لآخر استعلام في قاعدة البيانات.</p>
 
-      <div class="hero__stage">
-        <canvas id="gl" class="hero__canvas" aria-label="مجسم زجاجي ثلاثي الأبعاد تفاعلي"></canvas>
-        <p class="hero__gl-fallback" id="glFallback" hidden>
-          <span data-ar="المتصفح ده مش داعم WebGL — المحتوى كله شغال من غير المجسم."
-                data-en="WebGL isn’t supported here — all content works without the 3D object.">المتصفح ده مش داعم WebGL — المحتوى كله شغال من غير المجسم.</span>
-        </p>
-        <span class="hero__loading mono" id="glLoading" data-ar="…تحميل WebGL" data-en="LOADING WEBGL…">…تحميل WebGL</span>
+          <div class="hero__bar">
+            <button class="pill mono" id="motionBtn" type="button" aria-pressed="true" aria-label="تبديل الحركة">
+              <span class="pill__wave" aria-hidden="true">∿∿∿</span>
+              <span id="motionLabel" data-ar="الحركة: شغالة" data-en="MOTION: ON">الحركة: شغالة</span>
+            </button>
+            <p class="hero__hold mono" id="holdHint" data-ar="اضغط واستمر = تشريح" data-en="CLICK AND HOLD = DISSECT">اضغط واستمر = تشريح</p>
+            <div class="hero__line" aria-hidden="true"><i id="holdFill"></i></div>
+          </div>
+        </div>
+
+        <div class="hero__stage">
+          <span class="frame frame--tl" aria-hidden="true"></span><span class="frame frame--tr" aria-hidden="true"></span>
+          <span class="frame frame--bl" aria-hidden="true"></span><span class="frame frame--br" aria-hidden="true"></span>
+
+          <canvas id="gl" class="hero__canvas" aria-label="مجسم هيكل عظمي ثلاثي الأبعاد تفاعلي"></canvas>
+
+          <!-- بديل فوري لو WebGL فشل: نفس لغة القياس، بلا فراغ -->
+          <svg class="specimen" viewBox="0 0 200 320" aria-label="رسم خطي لهيكل عظمي" role="img">
+            <g fill="none" stroke="#8D93A8" stroke-width="2.4" stroke-linecap="round">
+              <circle cx="100" cy="34" r="20" stroke="#F0F4FC"/>
+              <path d="M92 46h16"/>
+              <path d="M100 56v96"/>
+              <path d="M100 70c-26 4-34 16-34 26M100 70c26 4 34 16 34 26M100 84c-30 4-38 16-38 26M100 84c30 4 38 16 38 26M100 98c-28 4-36 14-36 24M100 98c28 4 36 14 36 24"/>
+              <path d="M78 152h44l-8 18H86Z" stroke="#F0F4FC"/>
+              <path d="M78 62l-26 6-6 44 8 34M122 62l26 6 6 44-8 34"/>
+              <path d="M86 170l-6 62-4 62-10 14M114 170l6 62 4 62 10 14"/>
+            </g>
+            <g fill="#00F0FF"><circle cx="100" cy="56" r="3"/><circle cx="78" cy="152" r="3"/><circle cx="122" cy="152" r="3"/><circle cx="80" cy="232" r="3"/><circle cx="120" cy="232" r="3"/></g>
+          </svg>
+
+          <span class="anno anno--skull mono"><i></i><b data-ar="الجمجمة" data-en="SKULL">الجمجمة</b></span>
+          <span class="anno anno--ribs mono"><i></i><b data-ar="القفص الصدري" data-en="RIBCAGE">القفص الصدري</b></span>
+          <span class="anno anno--pelvis mono"><i></i><b data-ar="الحوض" data-en="PELVIS">الحوض</b></span>
+          <span class="anno anno--femur mono"><i></i><b data-ar="الفخذ" data-en="FEMUR">الفخذ</b></span>
+
+          <p class="hero__gl-fallback" id="glFallback" hidden>
+            <span data-ar="WebGL غير متاح — العينة معروضة كرسم قياس خطي، وكل المحتوى شغال."
+                  data-en="WebGL unavailable — the specimen renders as a line drawing; all content still works.">WebGL غير متاح — العينة معروضة كرسم قياس خطي، وكل المحتوى شغال.</span>
+          </p>
+          <span class="hero__loading mono" id="glLoading" data-ar="…تحميل العينة" data-en="LOADING SPECIMEN…">…تحميل العينة</span>
+        </div>
       </div>
 
-      <!-- تسميات تقنية حول المجسم -->
-      <span class="hero__tag mono hero__tag--a" aria-hidden="true">45 BONES / 1 MESH</span>
-      <span class="hero__tag mono hero__tag--b" aria-hidden="true">skeleton.glb · glTF 2.0</span>
-      <span class="hero__tag mono hero__tag--c" aria-hidden="true" data-ar="GLTFLoader" data-en="GLTFLOADER">GLTFLoader</span>
-
-      <p class="hero__role mono" data-ar="مطوّر ويب — تطبيقات full-stack من الواجهة لقاعدة البيانات"
-         data-en="WEB DEVELOPER — FULL-STACK APPS FROM UI TO DATABASE">مطوّر ويب — تطبيقات full-stack من الواجهة لقاعدة البيانات</p>
-
-      <!-- الشريط السفلي: سؤال + اضغط واستمر + خط التقدم -->
-      <div class="hero__bar">
-        <button class="pill mono" id="motionBtn" type="button" aria-pressed="true" aria-label="تبديل الحركة">
-          <span class="pill__wave" aria-hidden="true">∿∿∿</span>
-          <span id="motionLabel" data-ar="الحركة: شغالة" data-en="MOTION: ON">الحركة: شغالة</span>
-        </button>
-        <p class="hero__q" data-ar="جاهز تشوف الشغل الحقيقي؟" data-en="READY TO SEE THE REAL WORK?">جاهز تشوف الشغل الحقيقي؟</p>
-        <p class="hero__hold mono" id="holdHint" data-ar="اضغط واستمر" data-en="CLICK AND HOLD">اضغط واستمر</p>
-        <div class="hero__line" aria-hidden="true"><i id="holdFill"></i></div>
+      <div class="hero__meta mono">
+        <span data-ar="العربية افتراضي · RTL" data-en="ARABIC DEFAULT · RTL">العربية افتراضي · RTL</span>
+        <span class="hero__scrollcue" data-ar="مرّر للنزول إلى المختبر" data-en="SCROLL TO ENTER THE LAB">مرّر للنزول إلى المختبر</span>
+        <span>© <span id="year">2026</span></span>
       </div>
     </section>
 
-    <!-- ═══════════ التخصص — المهارات بلا مستويات مختلَقة ═══════════ -->
+    <!-- ═══════════ التخصص ═══════════ -->
     <section class="strip" id="specialty" aria-label="Stack">
       <div class="strip__track mono" id="marquee" aria-hidden="true">
-        <span>HTML</span><i>·</i><span>CSS</span><i>·</i><span>JavaScript</span><i>·</i><span>React</span><i>·</i><span>Next.js</span><i>·</i><span>Laravel</span><i>·</i><span>PostgreSQL</span><i>·</i><span>Security</span><i>·</i>
-        <span>HTML</span><i>·</i><span>CSS</span><i>·</i><span>JavaScript</span><i>·</i><span>React</span><i>·</i><span>Next.js</span><i>·</i><span>Laravel</span><i>·</i><span>PostgreSQL</span><i>·</i><span>Security</span><i>·</i>
+        <span>HTML</span><i>/</i><span>CSS</span><i>/</i><span>JavaScript</span><i>/</i><span>React</span><i>/</i><span>Next.js</span><i>/</i><span>Laravel</span><i>/</i><span>PostgreSQL</span><i>/</i><span>Security</span><i>/</i>
+        <span>HTML</span><i>/</i><span>CSS</span><i>/</i><span>JavaScript</span><i>/</i><span>React</span><i>/</i><span>Next.js</span><i>/</i><span>Laravel</span><i>/</i><span>PostgreSQL</span><i>/</i><span>Security</span><i>/</i>
       </div>
       <ul class="strip__list" id="stackList">
         <li>HTML</li><li>CSS</li><li>JavaScript</li><li>React</li><li>Next.js</li><li>Laravel</li><li>PostgreSQL</li><li>Security</li>
@@ -112,7 +132,7 @@
     <!-- ═══════════ WORKS WHEEL ═══════════ -->
     <section class="works" id="works" aria-label="Works">
       <div class="works__head">
-        <span class="eyebrow mono" data-ar="الأعمال — ٢ مشروع موثّق + ٥ تجارب معملية" data-en="WORKS — 2 DOCUMENTED PROJECTS + 5 LABS">الأعمال — ٢ مشروع موثّق + ٥ تجارب معملية</span>
+        <span class="eyebrow mono" data-ar="الأعمال — مشروعان موثّقان + ٥ تجارب معملية" data-en="WORKS — 2 DOCUMENTED PROJECTS + 5 LABS">الأعمال — مشروعان موثّقان + ٥ تجارب معملية</span>
         <h2 class="works__title" id="wheelTitle" data-ar="FitZone Pro" data-en="FitZone Pro">FitZone Pro</h2>
         <p class="works__hint mono" data-ar="اسحب أو ↑ ↓ · Tab للتنقل · Enter يفتح" data-en="DRAG OR ↑ ↓ · TAB TO NAVIGATE · ENTER OPENS">اسحب أو ↑ ↓ · Tab للتنقل · Enter يفتح</p>
       </div>
@@ -121,7 +141,6 @@
            aria-roledescription="carousel" aria-label="Works wheel">
         <div class="works__cyl" id="wheelCyl">
 
-          <!-- 1 · FitZone Pro -->
           <article class="card" data-title-ar="FitZone Pro" data-title-en="FitZone Pro" data-kind="client">
             <div class="card__top mono"><span class="card__idx">01</span><span class="card__kind" data-ar="مشروع عميل" data-en="CLIENT PROJECT">مشروع عميل</span></div>
             <h3 class="card__title">FitZone Pro</h3>
@@ -136,7 +155,6 @@
             </div>
           </article>
 
-          <!-- 2 · Interactive Restaurant Menu -->
           <article class="card" data-title-ar="Interactive Restaurant Menu" data-title-en="Interactive Restaurant Menu" data-kind="client">
             <div class="card__top mono"><span class="card__idx">02</span><span class="card__kind" data-ar="مشروع عميل" data-en="CLIENT PROJECT">مشروع عميل</span></div>
             <h3 class="card__title">Interactive Restaurant Menu</h3>
@@ -151,70 +169,73 @@
             </div>
           </article>
 
-          <!-- 3 · Lab 01 -->
           <article class="card" data-title-ar="Lab 01 — الهيكل العظمي الهولوغرافي" data-title-en="Lab 01 — Holographic Skeleton" data-kind="lab">
             <div class="card__top mono"><span class="card__idx">03</span><span class="card__kind" data-ar="تجربة معملية" data-en="LAB">تجربة معملية</span></div>
-            <h3 class="card__title" data-ar="الهيكل العظمي الهولوغرافي" data-en="Holographic Skeleton">الهيكل العظمي الهولوغرافي</h3>
-            <p class="card__desc" data-ar="المجسم اللي في أول الصفحة: هيكل عظمي بشري من 45 قطعة تشريحية، مولّد إجرائيًا ومصدّر كملف skeleton.glb، بيتحمّل بـ GLTFLoader ويشعّ سيان."
-               data-en="The object at the top of this page: a human skeleton of 45 anatomical pieces, generated procedurally, exported as skeleton.glb, loaded via GLTFLoader and glowing cyan.">المجسم اللي في أول الصفحة: هيكل عظمي بشري من 45 قطعة تشريحية، مولّد إجرائيًا ومصدّر كملف skeleton.glb، بيتحمّل بـ GLTFLoader ويشعّ سيان.</p>
+            <h3 class="card__title" data-ar="الهيكل العظمي الهولوغرافي" data-en="Holographic Skeleton">الهيكل العظمي الهولوغرامي</h3>
+            <p class="card__desc" data-ar="العينة اللي فاتحتك عليها الصفحة: هيكل عظمي من 45 قطعة تشريحية، مولّد إجرائيًا ومصدّر كـ skeleton.glb، بيتحمّل بـ GLTFLoader ويشعّ سيان."
+               data-en="The specimen opening this page: a 45-piece human skeleton, generated procedurally, exported as skeleton.glb, loaded via GLTFLoader and glowing cyan.">العينة اللي فاتحتك عليها الصفحة: هيكل عظمي من 45 قطعة تشريحية، مولّد إجرائيًا ومصدّر كـ skeleton.glb، بيتحمّل بـ GLTFLoader ويشعّ سيان.</p>
             <ul class="card__tech mono"><li>glTF 2.0</li><li>.glb</li><li>GLTFLoader</li><li>Three.js</li></ul>
             <div class="card__links"><a class="btn mono" href="assets/models/skeleton.glb" download data-ar="نزّل الـ .glb" data-en="DOWNLOAD .GLB">نزّل الـ .glb</a></div>
           </article>
 
-          <!-- 4 · Lab 02 -->
           <article class="card" data-title-ar="Lab 02 — عجلة الأعمال" data-title-en="Lab 02 — Works Wheel" data-kind="lab">
             <div class="card__top mono"><span class="card__idx">04</span><span class="card__kind" data-ar="تجربة معملية" data-en="LAB">تجربة معملية</span></div>
             <h3 class="card__title" data-ar="عجلة الأعمال" data-en="The Works Wheel">عجلة الأعمال</h3>
-            <p class="card__desc" data-ar="الأسطوانة المنظورّية اللي إنت واقف فيها دلوقتي: CSS 3D بلا WebGL، مثبّتة بالسكروول، بتستقر على أقرب بطاقة، وبتحرّر الصفحة عند الأطراف."
-               data-en="The perspective cylinder you’re standing in right now: CSS 3D with no WebGL, scroll-pinned, snapping to the nearest card, and releasing the page at its edges.">الأسطوانة المنظورّية اللي إنت واقف فيها دلوقتي: CSS 3D بلا WebGL، مثبّتة بالسكروول، بتستقر على أقرب بطاقة، وبتحرّر الصفحة عند الأطراف.</p>
+            <p class="card__desc" data-ar="الأسطوانة المنظورّية اللي إنت واقف فيها: CSS 3D بلا WebGL، مثبّتة بالسكروول، بتستقر على أقرب بطاقة، وبتحرّر الصفحة عند الأطراف."
+               data-en="The perspective cylinder you’re standing in: CSS 3D with no WebGL, scroll-pinned, snapping to the nearest card, releasing the page at its edges.">الأسطوانة المنظورّية اللي إنت واقف فيها: CSS 3D بلا WebGL، مثبّتة بالسكروول، بتستقر على أقرب بطاقة، وبتحرّر الصفحة عند الأطراف.</p>
             <ul class="card__tech mono"><li>CSS 3D</li><li>GSAP ScrollTrigger</li><li>Lenis</li></ul>
             <div class="card__links"><button class="btn mono" type="button" data-detail="wheel" data-ar="إزاي اتعملت" data-en="HOW IT WORKS">إزاي اتعملت</button></div>
           </article>
 
-          <!-- 5 · Lab 03 -->
-          <article class="card" data-title-ar="Lab 03 — اضغط واستمر" data-title-en="Lab 03 — Click & Hold" data-kind="lab">
+          <article class="card" data-title-ar="Lab 03 — التشريح بالضغط" data-title-en="Lab 03 — Hold to Dissect" data-kind="lab">
             <div class="card__top mono"><span class="card__idx">05</span><span class="card__kind" data-ar="تجربة معملية" data-en="LAB">تجربة معملية</span></div>
-            <h3 class="card__title" data-ar="اضغط واستمر" data-en="Click & Hold">اضغط واستمر</h3>
-            <p class="card__desc" data-ar="تفاعل الضغط المستمر في الـ Hero: بيسرّع دوران المجسم، يفرّق القطع المتفككة، ويملى خط التقدم تحت — وبيترد بأمان لو سيبت."
-               data-en="The hold interaction in the hero: it speeds the object’s spin, scatters the detached facets and fills the progress line below — and eases back safely on release.">تفاعل الضغط المستمر في الـ Hero: بيسرّع دوران المجسم، يفرّق القطع المتفككة، ويملى خط التقدم تحت — وبيترد بأمان لو سيبت.</p>
+            <h3 class="card__title" data-ar="التشريح بالضغط المستمر" data-en="Hold to Dissect">التشريح بالضغط المستمر</h3>
+            <p class="card__desc" data-ar="اضغط واستمر على العينة: الدوران بيسرع، التعليقات التشريحية بتضيء بالترتيب، والقطع الزجاجية بتتفرّق — وإفلات آمن عند الترك."
+               data-en="Click and hold the specimen: spin accelerates, anatomical annotations light up in sequence, glass shards scatter — easing back safely on release.">اضغط واستمر على العينة: الدوران بيسرع، التعليقات التشريحية بتضيء بالترتيب، والقطع الزجاجية بتتفرّق — وإفلات آمن عند الترك.</p>
             <ul class="card__tech mono"><li>Pointer Events</li><li>rAF</li><li>Easing</li></ul>
             <div class="card__links"><a class="btn mono" href="#home" data-ar="جرّبها فوق" data-en="TRY IT ABOVE">جرّبها فوق</a></div>
           </article>
 
-          <!-- 6 · Lab 04 -->
-          <article class="card" data-title-ar="Lab 04 — عكس الحركة للعربي" data-title-en="Lab 04 — RTL Motion Mirror" data-kind="lab">
+          <article class="card" data-title-ar="Lab 04 — مرآة الحركة للعربية" data-title-en="Lab 04 — RTL Motion Mirror" data-kind="lab">
             <div class="card__top mono"><span class="card__idx">06</span><span class="card__kind" data-ar="تجربة معملية" data-en="LAB">تجربة معملية</span></div>
             <h3 class="card__title" data-ar="مرآة الحركة للعربية" data-en="RTL Motion Mirror">مرآة الحركة للعربية</h3>
-            <p class="card__desc" data-ar="نظام بيعكس أي حركة أفقية تلقائيًا في RTL، ويثبّت الحركة الرأسية، ويكشف العربي على مستوى الكلمة — عشان اتصال الحروف ميتكسرش."
-               data-en="A system that mirrors any horizontal motion automatically in RTL, keeps vertical motion fixed, and reveals Arabic word-by-word — so letter joining never breaks.">نظام بيعكس أي حركة أفقية تلقائيًا في RTL، ويثبّت الحركة الرأسية، ويكشف العربي على مستوى الكلمة — عشان اتصال الحروف ميتكسرش.</p>
+            <p class="card__desc" data-ar="نظام بيعكس أي حركة أفقية تلقائيًا في RTL، يثبّت الرأسية، ويكشف العربي كلمة-بكلمة عشان اتصال الحروف ميتكسرش."
+               data-en="A system that mirrors horizontal motion automatically in RTL, keeps vertical motion fixed, and reveals Arabic word-by-word so letter joining never breaks.">نظام بيعكس أي حركة أفقية تلقائيًا في RTL، يثبّت الرأسية، ويكشف العربي كلمة-بكلمة عشان اتصال الحروف ميتكسرش.</p>
             <ul class="card__tech mono"><li>Logical Properties</li><li>CSS Transforms</li></ul>
             <div class="card__links"><button class="btn mono" type="button" id="mirrorDemo" data-ar="بدّل اللغة وشوف" data-en="SWITCH LANG TO SEE">بدّل اللغة وشوف</button></div>
           </article>
 
-          <!-- 7 · Lab 05 -->
           <article class="card" data-title-ar="Lab 05 — سكرول بالقصور الذاتي" data-title-en="Lab 05 — Inertia Scroll" data-kind="lab">
             <div class="card__top mono"><span class="card__idx">07</span><span class="card__kind" data-ar="تجربة معملية" data-en="LAB">تجربة معملية</span></div>
             <h3 class="card__title" data-ar="سكرول بالقصور الذاتي" data-en="Inertia Scroll">سكرول بالقصور الذاتي</h3>
-            <p class="card__desc" data-ar="تمرير ناعم بـ Lenis متزامن مع ScrollTrigger، بيتوقف فورًا لو الجهاز طلب تقليل الحركة، وبيحرّر العجلة عند أول وآخر بطاقة."
-               data-en="Smooth Lenis scrolling synced with ScrollTrigger; it stops instantly when the device asks for reduced motion, and releases the wheel at the first and last card.">تمرير ناعم بـ Lenis متزامن مع ScrollTrigger، بيتوقف فورًا لو الجهاز طلب تقليل الحركة، وبيحرّر العجلة عند أول وآخر بطاقة.</p>
+            <p class="card__desc" data-ar="تمرير ناعم بـ Lenis متزامن مع ScrollTrigger؛ بيتوقف فورًا مع تقليل الحركة، ويحرّر العجلة عند أول وآخر بطاقة."
+               data-en="Smooth Lenis scrolling synced with ScrollTrigger; stops instantly under reduced motion and releases the wheel at the first and last card.">تمرير ناعم بـ Lenis متزامن مع ScrollTrigger؛ بيتوقف فورًا مع تقليل الحركة، ويحرّر العجلة عند أول وآخر بطاقة.</p>
             <ul class="card__tech mono"><li>Lenis</li><li>ScrollTrigger</li></ul>
             <div class="card__links"><button class="btn mono" type="button" id="motionDemo" data-ar="طفّي الحركة وقارن" data-en="TOGGLE MOTION TO COMPARE">طفّي الحركة وقارن</button></div>
           </article>
 
         </div>
 
-        <!-- الفهرس الجانبي -->
-        <ol class="works__index mono" id="wheelIndex" aria-label="Works index"></ol>
+        <!-- Rail جانبي: فهرس مرقّم + عدّاد كبير -->
+        <div class="works__rail">
+          <span class="works__count mono" id="wheelCount">01 / 07</span>
+          <ol class="works__index mono" id="wheelIndex" aria-label="Works index"></ol>
+        </div>
 
         <div class="works__nav">
           <button class="wbtn mono" id="prevBtn" type="button" aria-label="السابق">↑</button>
-          <span class="works__count mono" id="wheelCount">01 / 07</span>
           <button class="wbtn mono" id="nextBtn" type="button" aria-label="التالي">↓</button>
         </div>
       </div>
+
+      <!-- فهرس المختبر: تسلسل حقيقي 01–05 يقفز للعجلة -->
+      <div class="labindex" id="labIndex" aria-label="Lab index">
+        <span class="eyebrow mono" data-ar="فهرس المختبر" data-en="LAB INDEX">فهرس المختبر</span>
+        <ol id="labList"></ol>
+      </div>
     </section>
 
-    <!-- ═══════════ نبذة — حقائق بس ═══════════ -->
+    <!-- ═══════════ نبذة ═══════════ -->
     <section class="about" id="about" aria-label="About">
       <span class="eyebrow mono" data-ar="عن" data-en="ABOUT">عن</span>
       <p class="about__line" data-ar="عمرو — مطوّر ويب. أبني تطبيقات ويب full-stack من الواجهة لقاعدة البيانات: React وNext.js في الواجهة، Laravel وPostgreSQL في الخلفية."
@@ -225,21 +246,23 @@
 
     <!-- ═══════════ تواصل ═══════════ -->
     <section class="contact" id="contact" aria-label="Contact">
-      <span class="eyebrow mono" data-ar="تواصل" data-en="CONTACT">تواصل</span>
       <h2 class="contact__title" data-ar="يلا نبدأ" data-en="LET’S START">يلا نبدأ</h2>
       <div class="contact__grid">
-        <a class="cline" href="mailto:ame07316@gmail.com">
+        <div class="cline">
           <span class="cline__k mono">EMAIL</span>
-          <span class="cline__v mono" dir="ltr">ame07316@gmail.com</span>
-        </a>
-        <a class="cline" href="https://wa.me/201288373753" target="_blank" rel="noopener">
+          <a class="cline__v mono" dir="ltr" href="mailto:ame07316@gmail.com">ame07316@gmail.com</a>
+          <button class="copy mono" type="button" data-copy="ame07316@gmail.com" data-ar="نسخ" data-en="COPY">نسخ</button>
+        </div>
+        <div class="cline">
           <span class="cline__k mono">WHATSAPP</span>
-          <span class="cline__v mono" dir="ltr">+20 128 837 3753</span>
-        </a>
-        <a class="cline" href="https://github.com/ame07316-del" target="_blank" rel="noopener">
+          <a class="cline__v mono" dir="ltr" href="https://wa.me/201288373753" target="_blank" rel="noopener">+20 128 837 3753</a>
+          <button class="copy mono" type="button" data-copy="+201288373753" data-ar="نسخ" data-en="COPY">نسخ</button>
+        </div>
+        <div class="cline">
           <span class="cline__k mono">GITHUB</span>
-          <span class="cline__v mono" dir="ltr">github.com/ame07316-del</span>
-        </a>
+          <a class="cline__v mono" dir="ltr" href="https://github.com/ame07316-del" target="_blank" rel="noopener">github.com/ame07316-del</a>
+          <button class="copy mono" type="button" data-copy="https://github.com/ame07316-del" data-ar="نسخ" data-en="COPY">نسخ</button>
+        </div>
       </div>
     </section>
   </main>
@@ -247,10 +270,9 @@
   <footer class="ftr mono">
     <span data-ar="عمرو — Web Developer" data-en="AMR — WEB DEVELOPER">عمرو — Web Developer</span>
     <span class="ftr__mid" data-ar="مبني بالحركة والكود، من غير قوالب" data-en="BUILT WITH MOTION AND CODE, NO TEMPLATES">مبني بالحركة والكود، من غير قوالب</span>
-    <span>© <span id="year">2026</span></span>
+    <span data-ar="العينة: skeleton.glb" data-en="SPECIMEN: skeleton.glb">العينة: skeleton.glb</span>
   </footer>
 
-  <!-- ═══════════ دراسة حالة (Dialog) ═══════════ -->
   <dialog class="case" id="caseDlg" aria-labelledby="caseTitle">
     <button class="case__x mono" id="caseX" type="button" aria-label="إغلاق">✕ <span data-ar="إغلاق" data-en="CLOSE">إغلاق</span></button>
     <span class="case__kind mono" id="caseKind"></span>
