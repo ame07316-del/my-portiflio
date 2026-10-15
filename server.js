@@ -55,16 +55,36 @@ const SEED = {
       images: [], note: { ar: 'المصادقة بتوكن Supabase يتحقق منه على السيرفر + صلاحيات RLS.',
                           en: 'Auth via a Supabase token verified server-side + RLS permissions.' },
       createdAt: now(), updatedAt: now() },
-    ...[ ['wheel', 'Lab 02 — عجلة الأعمال', 'Lab 02 — Works Wheel', 4],
-         ['hold',  'Lab 03 — اضغط واستمر',  'Lab 03 — Click & Hold', 5],
-         ['rtl',   'Lab 04 — مرآة الحركة للعربية', 'Lab 04 — RTL Motion Mirror', 6],
-         ['inertia','Lab 05 — سكرول بالقصور الذاتي', 'Lab 05 — Inertia Scroll', 7],
-         ['glass', 'Lab 01 — الكرة الزجاجية المنكسرة', 'Lab 01 — Refractive Glass Sphere', 3] ]
-      .map(([id, ar, en, order]) => ({
-        id, slug: id, order, status: 'published', kind: 'lab',
-        title: { ar, en }, desc: { ar: 'تجربة معملية ضمن هذا الموقع.', en: 'A lab experiment inside this site.' },
-        role: { ar: 'تجربة معملية', en: 'Lab experiment' }, tech: ['CSS 3D', 'Three.js', 'GSAP', 'Lenis'],
-        links: {}, images: [], note: { ar: '', en: '' }, createdAt: now(), updatedAt: now() }))
+    ...(() => {
+      const LABS = {
+        glass:   { ar: 'Lab 01 — الهيكل العظمي الهولوغرافي', en: 'Lab 01 — Holographic Skeleton', order: 3,
+          dAr: 'مجسم هيكل عظمي بشري (45 قطعة تشريحية) مولّد إجرائيًا ومصدّر كملف skeleton.glb، بيتحمّل بـ GLTFLoader بخامة هولوغرام تشعّ سيان.',
+          dEn: 'A human skeletal model (45 anatomical pieces) generated procedurally and exported as skeleton.glb, loaded via GLTFLoader with a cyan-emissive holographic material.',
+          tech: ['glTF 2.0', '.glb', 'GLTFLoader', 'Three.js'], live: 'assets/models/skeleton.glb' },
+        wheel:   { ar: 'Lab 02 — عجلة الأعمال', en: 'Lab 02 — Works Wheel', order: 4,
+          dAr: 'الأسطوانة المنظورّية في قسم الأعمال: CSS 3D بلا WebGL، مثبّتة بالسكروول، بتستقر على أقرب بطاقة وبتحرّر الصفحة عند الأطراف.',
+          dEn: 'The perspective cylinder in the works section: CSS 3D with no WebGL, scroll-pinned, snapping to the nearest card and releasing the page at its edges.',
+          tech: ['CSS 3D', 'GSAP ScrollTrigger', 'Lenis'], live: '' },
+        hold:    { ar: 'Lab 03 — اضغط واستمر', en: 'Lab 03 — Click & Hold', order: 5,
+          dAr: 'تفاعل الضغط المستمر في الـ Hero: بيسرّع دوران الهيكل، يفرّق القطع الزجاجية، ويملى خط التقدم — ويترد بأمان عند الإفلات.',
+          dEn: 'The hold interaction in the hero: speeds the skeleton’s spin, scatters the glass shards and fills the progress line — easing back safely on release.',
+          tech: ['Pointer Events', 'rAF', 'Easing'], live: '' },
+        rtl:     { ar: 'Lab 04 — مرآة الحركة للعربية', en: 'Lab 04 — RTL Motion Mirror', order: 6,
+          dAr: 'نظام بيعكس الحركة الأفقية تلقائيًا في RTL، يثبّت الرأسية، ويكشف العربي كلمة-بكلمة عشان اتصال الحروف ميتكسرش.',
+          dEn: 'A system that mirrors horizontal motion automatically in RTL, keeps vertical motion fixed, and reveals Arabic word-by-word so letter joining never breaks.',
+          tech: ['Logical Properties', 'CSS Transforms'], live: '' },
+        inertia: { ar: 'Lab 05 — سكرول بالقصور الذاتي', en: 'Lab 05 — Inertia Scroll', order: 7,
+          dAr: 'تمرير ناعم بـ Lenis متزامن مع ScrollTrigger؛ بيتوقف فورًا مع تقليل الحركة، ويحرّر العجلة عند أول وآخر بطاقة.',
+          dEn: 'Smooth Lenis scrolling synced with ScrollTrigger; stops instantly under reduced motion and releases the wheel at the first and last card.',
+          tech: ['Lenis', 'ScrollTrigger'], live: '' }
+      };
+      return Object.entries(LABS).map(([id, L]) => ({
+        id, slug: id, order: L.order, status: 'published', kind: 'lab',
+        title: { ar: L.ar, en: L.en }, desc: { ar: L.dAr, en: L.dEn },
+        role: { ar: 'تجربة معملية', en: 'Lab experiment' }, tech: L.tech,
+        links: L.live ? { live: L.live } : {}, images: [], note: { ar: '', en: '' },
+        createdAt: now(), updatedAt: now() }));
+    })()
   ],
   sections: [ { id: 'home', visible: true, order: 1 }, { id: 'specialty', visible: true, order: 2 },
               { id: 'works', visible: true, order: 3 }, { id: 'about', visible: true, order: 4 },
@@ -111,6 +131,7 @@ function authed(req) {
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.pdf': 'application/pdf',
+  '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json',
   '.txt': 'text/plain; charset=utf-8', '.md': 'text/markdown; charset=utf-8' };
 
 function json(res, code, obj, headers = {}) {
