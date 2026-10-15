@@ -14,7 +14,7 @@
   const L = (ar, en) => (lang === 'ar' ? ar : en);
 
   const CASES = {
-    gym: {
+    fitzone: {
       kindAr: 'مشروع عميل', kindEn: 'CLIENT PROJECT',
       titleAr: 'FitZone Pro', titleEn: 'FitZone Pro',
       blocks: () => [

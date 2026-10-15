@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>لوحة عمرو — إدارة</title>
+  <link rel="stylesheet" href="assets/css/style.css" />
+  <link rel="stylesheet" href="assets/css/admin.css" />
+</head>
+<body class="adm">
+
+  <!-- ═══════ دخول ═══════ -->
+  <section class="login" id="viewLogin">
+    <form class="login__box" id="loginForm">
+      <span class="mono eyebrow">لوحة المالك — مستخدم واحد</span>
+      <h1>الدخول</h1>
+      <label class="mono" for="pw">كلمة السر</label>
+      <input id="pw" type="password" autocomplete="current-password" required />
+      <button class="btn" type="submit">دخول</button>
+      <p class="login__err mono" id="loginErr" role="alert"></p>
+      <p class="login__hint mono">كلمة السر الأولية في data/credentials.txt أو متغير ADMIN_PASSWORD</p>
+    </form>
+  </section>
+
+  <!-- ═══════ اللوحة ═══════ -->
+  <div class="adm__shell" id="viewApp" hidden>
+    <aside class="adm__side">
+      <p class="mono adm__brand">لوحة عمرو</p>
+      <nav class="adm__nav mono">
+        <button data-view="dash" class="is-on">الملخص</button>
+        <button data-view="projects">المشاريع</button>
+        <button data-view="sections">الأقسام</button>
+        <button data-view="media">الوسائط</button>
+        <button data-view="settings">الإعدادات</button>
+        <button data-view="log">السجل</button>
+      </nav>
+      <div class="adm__side-foot">
+        <a class="btn btn--ghost mono" href="/?drafts=1" target="_blank" rel="noopener">معاينة بالمسودات</a>
+        <a class="btn btn--ghost mono" href="/" target="_blank" rel="noopener">الموقع المنشور</a>
+        <button class="btn btn--ghost mono" id="logout">خروج</button>
+      </div>
+    </aside>
+
+    <main class="adm__main">
+      <p class="adm__status mono" id="status" role="status"></p>
+
+      <!-- الملخص -->
+      <section class="view" data-view="dash">
+        <h2>الملخص</h2>
+        <div class="tiles" id="tiles"></div>
+        <h3 class="mono">تحذيرات قبل النشر</h3>
+        <ul class="warns" id="warns"></ul>
+        <h3 class="mono">آخر التعديلات</h3>
+        <ul class="log" id="dashLog"></ul>
+      </section>
+
+      <!-- المشاريع -->
+      <section class="view" data-view="projects" hidden>
+        <div class="row">
+          <h2>المشاريع</h2>
+          <button class="btn" id="newProject">+ مشروع جديد (مسودة)</button>
+        </div>
+        <ul class="plist" id="plist"></ul>
+      </section>
+
+      <!-- محرر مشروع -->
+      <section class="view" data-view="editor" hidden>
+        <div class="row">
+          <h2 id="edTitle">تحرير</h2>
+          <button class="btn btn--ghost mono" id="edBack">→ رجوع</button>
+        </div>
+        <div class="langtabs mono" id="langTabs">
+          <button data-l="ar" class="is-on">العربية</button>
+          <button data-l="en">English</button>
+        </div>
+        <form id="edForm" class="edform">
+          <label class="mono">العنوان <span class="req">*</span></label><input id="f_title" required />
+          <label class="mono">الوصف <span class="req">*</span></label><textarea id="f_desc" rows="4" required></textarea>
+          <label class="mono">دور عمرو (اختياري — فارغ = «بانتظار التأكيد»)</label><input id="f_role" />
+          <label class="mono">ملاحظة حدود صادقة (اختياري)</label><input id="f_note" />
+          <div class="grid2">
+            <div><label class="mono">الحالة</label>
+              <select id="f_status">
+                <option value="draft">مسودة</option><option value="published">منشور</option>
+                <option value="in_progress">قيد التنفيذ</option><option value="archived">مؤرشف</option>
+              </select></div>
+            <div><label class="mono">النوع</label>
+              <select id="f_kind"><option value="client">مشروع عميل</option><option value="lab">تجربة معملية</option></select></div>
+            <div><label class="mono">الترتيب</label><input id="f_order" type="number" min="0" /></div>
+            <div><label class="mono">التقنيات (مفصولة بفواصل)</label><input id="f_tech" /></div>
+          </div>
+          <div class="grid2">
+            <div><label class="mono">رابط معاينة (https)</label><input id="f_live" placeholder="https://…" /></div>
+            <div><label class="mono">رابط مستودع (https)</label><input id="f_repo" placeholder="https://…" /></div>
+          </div>
+          <label class="mono">صور</label>
+          <ul class="imgs" id="f_imgs"></ul>
+          <div class="row">
+            <input type="file" id="f_imgfile" accept="image/png,image/jpeg,image/webp" />
+            <label class="mono">نص بديل للصورة المرفوعة</label><input id="f_imgalt" />
+          </div>
+          <p class="mono missing" id="f_missing"></p>
+          <div class="row">
+            <button class="btn" type="submit">حفظ كمسودة</button>
+            <button class="btn" type="button" id="edPublish">نشر</button>
+            <button class="btn btn--ghost" type="button" id="edUnpublish">إلغاء نشر</button>
+          </div>
+        </form>
+        <h3 class="mono">نسخ قابلة للاستعادة</h3>
+        <ul class="log" id="edVersions"></ul>
+      </section>
+
+      <!-- الأقسام -->
+      <section class="view" data-view="sections" hidden>
+        <h2>أقسام الرئيسية</h2>
+        <ul class="sects" id="sects"></ul>
+        <button class="btn" id="saveSections">حفظ الترتيب والظهور</button>
+      </section>
+
+      <!-- الوسائط -->
+      <section class="view" data-view="media" hidden>
+        <h2>مكتبة الوسائط</h2>
+        <div class="row"><input type="file" id="upFile" accept="image/png,image/jpeg,image/webp" />
+          <button class="btn" id="upBtn">رفع</button></div>
+        <ul class="media" id="mediaList"></ul>
+      </section>
+
+      <!-- الإعدادات -->
+      <section class="view" data-view="settings" hidden>
+        <h2>الإعدادات</h2>
+        <div class="langtabs mono" id="setLangTabs">
+          <button data-l="ar" class="is-on">العربية</button><button data-l="en">English</button>
+        </div>
+        <label class="mono">عنوان SEO</label><input id="s_seoTitle" />
+        <label class="mono">وصف SEO</label><textarea id="s_seoDesc" rows="2"></textarea>
+        <div class="grid2">
+          <div><label class="mono">إيميل</label><input id="s_email" /></div>
+          <div><label class="mono">واتساب</label><input id="s_wa" /></div>
+        </div>
+        <label class="mono">GitHub</label><input id="s_gh" />
+        <label class="mono">المظهر (خيارات محدودة وآمنة)</label>
+        <select id="s_theme"><option value="dark">داكن</option><option value="light">فاتح</option></select>
+        <button class="btn" id="saveSettings">حفظ الإعدادات</button>
+      </section>
+
+      <!-- السجل -->
+      <section class="view" data-view="log" hidden>
+        <h2>سجل التعديلات</h2>
+        <ul class="log" id="logList"></ul>
+      </section>
+    </main>
+  </div>
+
+  <dialog class="case" id="confirmDlg">
+    <h3 class="case__title" id="cfTitle"></h3>
+    <div class="case__body" id="cfBody"></div>
+    <div class="row">
+      <button class="btn" id="cfYes">تأكيد</button>
+      <button class="btn btn--ghost" id="cfNo">إلغاء</button>
+    </div>
+  </dialog>
+
+  <script src="assets/js/admin.js" defer></script>
+</body>
+</html>

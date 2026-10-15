@@ -295,6 +295,15 @@ body.no-motion .strip__track { animation: none; }
 body.no-motion .rv > span { transform: none; }
 body.no-motion .hero__canvas { opacity: .55; }
 
+/* ─────────── مظهر فاتح (خيار محدود من لوحة الإدارة) ─────────── */
+html[data-theme="light"] {
+  --bg: #F2F4FA; --surf-1: #FFFFFF; --surf-2: #E4E8F2;
+  --t-1: #0A0B10; --t-2: #4A5168; --t-3: #8D93A8;
+  --line: rgba(10,11,16,.14); --line-hi: rgba(0,140,150,.5);
+  --cyan: #009AA8; --violet: #6A1FBF;
+}
+html[data-theme="light"] .bg__dots { opacity: .8; }
+
 /* ─────────── استجابة: 12 / 8 / 4 ─────────── */
 @media (max-width: 1024px) {
   .works__index { display: none; }

@@ -29,6 +29,7 @@
   $('#langBtn').addEventListener('click', () => {
     applyLang(lang === 'ar' ? 'en' : 'ar');
     document.dispatchEvent(new CustomEvent('amr:lang', { detail: { lang } }));
+    syncContent();   // إعادة بناء نصوص الكروت من البيانات باللغة الجديدة
   });
 
   /* ════════ 2 · كشف على مستوى الكلمة (آمن للعربي — ميتكسرش اتصال الحروف) ════════
@@ -75,11 +76,15 @@
   const works  = $('#works');
   const stage  = $('#wheelStage');
   const cyl    = $('#wheelCyl');
-  const cards  = $$('.card', cyl);
-  const N      = cards.length;
-  const STEP   = 360 / N;
   const CARD_H = 380, GAP = 48;
-  const R      = Math.round(N * (CARD_H + GAP) / (2 * Math.PI));   // نصف قطر حقيقي من المحيط
+  let cards = [], N = 0, STEP = 0, R = 0;
+  function recompute() {
+    cards = $$('.card', cyl);
+    N = cards.length;
+    STEP = N ? 360 / N : 0;
+    R = N ? Math.round(N * (CARD_H + GAP) / (2 * Math.PI)) : 0;   // نصف قطر حقيقي من المحيط
+  }
+  recompute();
   const idxEl  = $('#wheelIndex');
   const titleEl= $('#wheelTitle');
   const countEl= $('#wheelCount');
@@ -144,6 +149,7 @@
     if (!animMode || !window.gsap || !window.ScrollTrigger) { staticMode(); return; }
     gsap.registerPlugin(ScrollTrigger);
     works.classList.remove('no-anim');
+    if (st) { st.kill(); st = null; }
     st = ScrollTrigger.create({
       trigger: stage,
       start: 'top top',
@@ -214,6 +220,55 @@
     ScrollTrigger.refresh();
   });
 
+  /* ════════ 7 · مزامنة المحتوى المنشور من الخادم (برومبت 6/7) ════════
+     الـ HTML المكتوب بيفضل بديلًا كاملًا لو الـ API فشل — المحتوى مقروء دايمًا. */
+  const DRAFTS = new URLSearchParams(location.search).get('drafts') === '1';
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  const cardHTML = (p, i) => {
+    const L = (ar, en) => (lang === 'ar' ? ar : en);
+    const kindLabel = p.kind === 'lab' ? L('تجربة معملية', 'LAB') : L('مشروع عميل', 'CLIENT PROJECT');
+    return `
+    <article class="card" data-id="${esc(p.id)}" data-title-ar="${esc(p.title.ar)}" data-title-en="${esc(p.title.en)}" data-kind="${esc(p.kind)}">
+      <div class="card__top mono"><span class="card__idx">${String(i + 1).padStart(2, '0')}</span><span class="card__kind">${kindLabel}</span></div>
+      <h3 class="card__title">${esc(L(p.title.ar, p.title.en))}</h3>
+      <p class="card__desc">${esc(L(p.desc.ar, p.desc.en))}</p>
+      <ul class="card__tech mono">${(p.tech || []).map(t => `<li>${esc(t)}</li>`).join('')}</ul>
+      ${(p.note && (p.note.ar || p.note.en)) ? `<p class="card__note mono">${esc(L(p.note.ar, p.note.en))}</p>` : ''}
+      <div class="card__links">
+        ${p.links?.live ? `<a class="btn mono" href="${esc(p.links.live)}" target="_blank" rel="noopener">${L('معاينة', 'LIVE')}</a>` : ''}
+        ${p.links?.repo ? `<a class="btn btn--ghost mono" href="${esc(p.links.repo)}" target="_blank" rel="noopener">${L('الكود', 'CODE')}</a>` : ''}
+        ${p.kind === 'client' ? `<button class="btn btn--ghost mono" type="button" data-detail="${esc(p.id)}">${L('التفاصيل', 'DETAILS')}</button>` : ''}
+      </div>
+    </article>`;
+  };
+
+  async function syncContent() {
+    try {
+      const r = await fetch('/api/public/content' + (DRAFTS ? '?drafts=1' : ''));
+      if (!r.ok) return;
+      const data = await r.json();
+      if (data.settings?.theme) root.dataset.theme = data.settings.theme;
+      const c = data.settings?.contact;
+      if (c) $$('.cline').forEach(a => {
+        const h = a.getAttribute('href') || '';
+        if (h.startsWith('mailto:')) a.href = 'mailto:' + c.email;
+        else if (h.includes('wa.me')) a.href = 'https://wa.me/' + (c.whatsapp || '').replace(/[^\d]/g, '');
+        else if (h.includes('github.com')) a.href = c.github;
+      });
+      const vis = new Set((data.sections || []).map(s => s.id));
+      ['home', 'specialty', 'works', 'about', 'contact'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = vis.has(id) ? '' : 'none';
+      });
+      cyl.innerHTML = data.projects.map(cardHTML).join('') ||
+        `<div class="empty-state mono">${lang === 'ar' ? 'مفيش أعمال منشورة لسه.' : 'No published works yet.'}</div>`;
+      recompute(); buildIndex();
+      if (motionOn && N) buildWheel(); else staticMode();
+      refreshWheelText();
+    } catch (e) { /* فشل الأصل الخارجي → الكروت المكتوبة في HTML تفضل شغالة */ }
+  }
+
   /* ════════ 6 · إقلاع ════════ */
   $('#year').textContent = new Date().getFullYear();
   applyLang('ar');
@@ -221,4 +276,5 @@
   emptyCheck();
   if (motionOn) { initLenis(); buildWheel(); } else { setMotion(false); }
   refreshWheelText();
+  syncContent();
 })();
