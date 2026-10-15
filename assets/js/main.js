@@ -20,6 +20,7 @@
     lang = next;
     root.lang = lang;
     root.dir = lang === 'ar' ? 'rtl' : 'ltr';
+    document.cookie = `lang=${lang}; path=/; max-age=31536000; SameSite=Lax`;  // عشان الـ SSR يجيب meta بنفس اللغة
     i18n.forEach(el => { el.textContent = el.dataset[lang === 'ar' ? 'ar' : 'en']; });
     document.title = lang === 'ar' ? 'عمرو — Web Developer' : 'AMR — Web Developer';
     splitAll();
@@ -232,6 +233,7 @@
     <article class="card" data-id="${esc(p.id)}" data-title-ar="${esc(p.title.ar)}" data-title-en="${esc(p.title.en)}" data-kind="${esc(p.kind)}">
       <div class="card__top mono"><span class="card__idx">${String(i + 1).padStart(2, '0')}</span><span class="card__kind">${kindLabel}</span></div>
       <h3 class="card__title">${esc(L(p.title.ar, p.title.en))}</h3>
+      ${(p.images || []).length ? `<img class="card__img" src="/${esc(p.images[0].path)}" alt="${esc(L(p.images[0].alt?.ar, p.images[0].alt?.en))}" loading="lazy" onerror="this.remove()">` : ''}
       <p class="card__desc">${esc(L(p.desc.ar, p.desc.en))}</p>
       <ul class="card__tech mono">${(p.tech || []).map(t => `<li>${esc(t)}</li>`).join('')}</ul>
       ${(p.note && (p.note.ar || p.note.en)) ? `<p class="card__note mono">${esc(L(p.note.ar, p.note.en))}</p>` : ''}

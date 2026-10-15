@@ -14,9 +14,21 @@
     if (CSRF && opts.method && opts.method !== 'GET') headers['x-csrf'] = CSRF;
     const r = await fetch(path, { ...opts, headers, credentials: 'same-origin' });
     const body = await r.json().catch(() => ({}));
-    if (!r.ok) { const e = new Error(body.error || r.status); e.body = body; e.code = r.status; throw e; }
+    if (!r.ok) {
+      // جلسة منتهية أو غير مخوّل: رجوع فوري لشاشة الدخول برسالة واضحة — مفيش شاشة مكسورة
+      if (r.status === 401 && !path.includes('/login') && !path.includes('/session')) sessionExpired();
+      const e = new Error(body.error || r.status); e.body = body; e.code = r.status; throw e;
+    }
     return body;
   }
+  function sessionExpired() {
+    $('#viewApp').hidden = true; $('#viewLogin').hidden = false;
+    $('#loginErr').textContent = 'انتهت الجلسة أو مفيش صلاحية — ادخل تاني.';
+  }
+
+  /* انقطاع/رجوع الشبكة: مؤشر واضح بدل فقدان تعديلات بصمت */
+  addEventListener('offline', () => status('⚠ الشبكة مقطوعة — أي حفظ هيفشل لحد ما ترجع'));
+  addEventListener('online',  () => status('الشبكة رجعت ✔'));
 
   /* ── تأكيد عام ── */
   const dlg = $('#confirmDlg');

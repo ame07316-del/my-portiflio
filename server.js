@@ -188,6 +188,26 @@ function snapshot(projectId) {
     .concat(db.versions.filter(v => v.projectId !== projectId));
 }
 
+/* ─────────── SEO ثنائي اللغة: الـ meta تُحقن على السيرفر حسب اللغة ─────────── */
+const escAttr = s => String(s ?? '').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+function pickLang(req) {
+  const q = new URL(req.url, 'http://x').searchParams.get('lang');
+  if (q === 'ar' || q === 'en') return q;
+  const c = parseCookies(req).lang;
+  if (c === 'ar' || c === 'en') return c;
+  return (req.headers['accept-language'] || '').toLowerCase().includes('ar') ? 'ar' : 'ar'; // العربية افتراضي
+}
+function renderIndex(lang) {
+  const seo = db.settings.seo;
+  let h = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  h = h.replace(/<title>[\s\S]*?<\/title>/, `<title>${escAttr(seo.title[lang])}</title>`);
+  h = h.replace(/<meta name="description" content="[^"]*"/, `<meta name="description" content="${escAttr(seo.desc[lang])}"`);
+  h = h.replace(/<meta property="og:title" content="[^"]*"/, `<meta property="og:title" content="${escAttr(seo.title[lang])}"`);
+  h = h.replace(/<meta property="og:description" content="[^"]*"/, `<meta property="og:description" content="${escAttr(seo.desc[lang])}"`);
+  h = h.replace(/<html lang="ar" dir="rtl">/, lang === 'en' ? '<html lang="en" dir="ltr">' : '<html lang="ar" dir="rtl">');
+  return h;
+}
+
 /* ─────────── الخادم ─────────── */
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
@@ -346,7 +366,14 @@ const server = http.createServer(async (req, res) => {
     }
 
     /* ── ملفات ثابتة ── */
-    let file = p === '/' ? '/index.html' : p;
+    if (p === '/' || p === '/index.html') {
+      const lang = pickLang(req);
+      const body = renderIndex(lang);
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store',
+        'Content-Language': lang });
+      return res.end(body);
+    }
+    let file = p;
     file = path.normalize(file).replace(/^(\.\.[/\\])+/, '');
     const abs = path.join(ROOT, file);
     if (!abs.startsWith(ROOT)) return json(res, 403, { error: 'traversal' });
